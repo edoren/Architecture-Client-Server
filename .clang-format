@@ -1,0 +1,10 @@
+BasedOnStyle: Google
+
+Language: Cpp
+
+AccessModifierOffset: -4
+AllowShortFunctionsOnASingleLine: Empty
+ColumnLimit: 80
+ConstructorInitializerIndentWidth: 6
+Cpp11BracedListStyle: true
+IndentWidth: 4
