@@ -30,7 +30,7 @@ endif()
 
 # If compiler is GNU GCC or Clang enable the warnings
 if(${COMPILER} STREQUAL "GCC" OR ${COMPILER} STREQUAL "Clang")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -pedantic")
 endif()
 
 ###############################################################################
@@ -65,7 +65,7 @@ else()
     set(ZEROMQ_LIBRARY_SHARED libzmq)
     set(ZEROMQ_LIBRARY_STATIC libzmq-static)
     add_subdirectory("${CMAKE_SOURCE_DIR}/third_party/zmqpp" EXCLUDE_FROM_ALL)
-    set(THIRD_PARTY_LIBRARIES libzmq zmqpp)
+    set(THIRD_PARTY_LIBRARIES libzmq zmqpp-static)
     set(THIRD_PARTY_INCLUDE_DIRS ${ZEROMQ_INCLUDE} ${ZMQPP_INCLUDE})
 endif()
 
