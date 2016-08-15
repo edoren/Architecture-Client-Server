@@ -17,15 +17,15 @@ mark_as_advanced(CMAKE_CONFIGURATION_TYPES)
 ###############################################################################
 ## Compiler configuration
 
-# Adding C++14 support in GCC compiler and Clang compiler
+# Adding C++11 support in GCC compiler and Clang compiler
 if(${COMPILER} STREQUAL "Clang")
     if(${OS} STREQUAL "Linux")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -stdlib=libstdc++")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -stdlib=libstdc++")
     else()
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -stdlib=libc++")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -stdlib=libc++")
     endif()
 elseif(${COMPILER} STREQUAL "GCC")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 endif()
 
 # If compiler is GNU GCC or Clang enable the warnings
@@ -65,7 +65,7 @@ else()
     set(ZEROMQ_LIBRARY_SHARED libzmq)
     set(ZEROMQ_LIBRARY_STATIC libzmq-static)
     add_subdirectory("${CMAKE_SOURCE_DIR}/third_party/zmqpp" EXCLUDE_FROM_ALL)
-    set(THIRD_PARTY_LIBRARIES libzmq zmqpp-static)
+    set(THIRD_PARTY_LIBRARIES libzmq zmqpp)
     set(THIRD_PARTY_INCLUDE_DIRS ${ZEROMQ_INCLUDE} ${ZMQPP_INCLUDE})
 endif()
 
