@@ -72,18 +72,4 @@ endif()
 ###############################################################################
 ## Project configuration
 
-set(SERVER_SOURCE
-    "${CMAKE_SOURCE_DIR}/src/simple_server.cpp"
-)
-
-set(CLIENT_SOURCE
-    "${CMAKE_SOURCE_DIR}/src/simple_client.cpp"
-)
-
-add_executable(server ${SERVER_SOURCE})
-add_executable(client ${CLIENT_SOURCE})
-
-include_directories(${THIRD_PARTY_INCLUDE_DIRS})
-
-target_link_libraries(server ${THIRD_PARTY_LIBRARIES})
-target_link_libraries(client ${THIRD_PARTY_LIBRARIES})
+add_subdirectory(src)
