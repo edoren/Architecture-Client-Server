@@ -28,9 +28,6 @@ public:
 
         Matrix<T> result(NumRows(), other.NumCols());
 
-        std::cout << "rows:" << NumRows() << " cols:" << NumCols() << "\n";
-        std::cout << "rows:" << other.NumRows() << " cols:" << other.NumCols() << "\n";
-
         for (size_t j = 0; j < NumRows(); j++) {
             for (size_t i = 0; i < other.NumCols(); i++) {
                 for (size_t k = 0; k < NumCols(); k++) {
@@ -150,10 +147,6 @@ int ParseMatrix(const std::string& str, Matrix<float>& m) {
     m.SetSize(nrows, ncols);
     m.SetData(v);
 
-    for(auto& lol : v)
-        std::cout << lol << ",";
-    std::cout << "\n";
-
     return 0;
 }
 
@@ -187,8 +180,8 @@ int main(int /*argc*/, char** /*argv*/) {
         if (operation == "mul") {
             std::string matrix1_data, matrix2_data;
             request >> matrix1_data >> matrix2_data;
-            std::cout << matrix1_data << "\n";
-            std::cout << matrix2_data << "\n";
+            std::cout << "First Matrix: " << matrix1_data << "\n";
+            std::cout << "Second Matrix: " << matrix2_data << "\n";
 
             Matrix<float> matrix1, matrix2;
 
