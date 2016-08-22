@@ -7,6 +7,7 @@
 #include <zmqpp/zmqpp.hpp>
 
 #include <Util/Matrix.hpp>
+#include <Util/LinearAlgebra.hpp>
 
 template <typename T>
 std::ostream& operator<<(std::ostream& os, const Matrix<T>& m) {
@@ -45,7 +46,7 @@ int ParseMatrix(const std::string& str, Matrix<float>& m) {
     };
 
     for (auto& token : str) {
-        if (std::isdigit(token) || token == '.') {
+        if (std::isdigit(token) || token == '.' || token == '-') {
             number_str.push_back(token);
         } else if (token == ',') {
             add_number();
@@ -108,29 +109,52 @@ int main(int /*argc*/, char** /*argv*/) {
         request >> operation;
         std::cout << "Operation: " << operation << "\n";
 
-        Matrix<float> result;
+        std::stringstream stream;
 
         if (operation == "mul") {
             std::string matrix1_data, matrix2_data;
             request >> matrix1_data >> matrix2_data;
-            std::cout << "First Matrix: " << matrix1_data << "\n";
-            std::cout << "Second Matrix: " << matrix2_data << "\n";
 
             Matrix<float> matrix1, matrix2;
 
             ParseMatrix(matrix1_data, matrix1);
             ParseMatrix(matrix2_data, matrix2);
+            std::cout << "First Matrix: " << matrix1 << "\n";
+            std::cout << "Second Matrix: " << matrix2 << "\n";
 
-            result = matrix1 * matrix2;
+            Matrix<float> result = matrix1 * matrix2;
+
+            stream << result;
+            std::cout << "Sent: " << result << "\n";
         } else if (operation == "det") {
-            // TODO: :v
-        }
+            std::string matrix_data;
+            request >> matrix_data;
 
-        std::stringstream stream;
-        stream << result;
+            Matrix<float> matrix;
+
+            ParseMatrix(matrix_data, matrix);
+
+            float value = Determinant(matrix);
+            std::cout << "Matrix: " << matrix << "\n";
+
+            stream << value;
+            std::cout << "Sent: " << value << "\n";
+        } else if (operation == "inverse") {
+            std::string matrix_data;
+            request >> matrix_data;
+
+            Matrix<float> matrix;
+
+            ParseMatrix(matrix_data, matrix);
+
+            Matrix<float> result = Inverse(matrix);
+            std::cout << "Matrix: " << matrix << "\n";
+
+            stream << result;
+            std::cout << "Sent: " << result << "\n";
+        }
 
         response << stream.str();
         socket.send(response);
-        std::cout << "Sent: " << result << "\n";
     }
 }

@@ -5,7 +5,7 @@ int main(int argc, char** argv) {
     const std::string endpoint = "tcp://localhost:4242";
 
     if (argc < 2) {
-        std::cout << "usage: " << argv[0] << " [mul|det] matrices...\n";
+        std::cout << "usage: " << argv[0] << " [mul|det|inverse] matrices...\n";
         return 1;
     }
 
@@ -14,7 +14,7 @@ int main(int argc, char** argv) {
     if (argc != 4 && operation == "mul") {
         std::cerr << "Invalid number of matrices, expected 1.\n";
         return 2;
-    } else if (argc != 3 && operation == "det") {
+    } else if (argc != 3 && (operation == "det" || operation == "inverse")) {
         std::cerr << "Invalid number of matrices, expected 1.\n";
         return 2;
     }
