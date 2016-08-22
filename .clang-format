@@ -7,4 +7,5 @@ AllowShortFunctionsOnASingleLine: Empty
 ColumnLimit: 80
 ConstructorInitializerIndentWidth: 6
 Cpp11BracedListStyle: true
+DerivePointerAlignment: false
 IndentWidth: 4

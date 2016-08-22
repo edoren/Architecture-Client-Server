@@ -1,4 +1,4 @@
-include_directories(${THIRD_PARTY_INCLUDE_DIRS})
+include_directories(${THIRD_PARTY_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR})
 
 ###############################################################################
 ## 1 - Operations
