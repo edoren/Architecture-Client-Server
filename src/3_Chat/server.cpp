@@ -1,35 +1,33 @@
 #include <cassert>
 #include <iostream>
+#include <list>
 #include <string>
 #include <unordered_map>
 #include <zmqpp/zmqpp.hpp>
 
-using namespace std;
-using namespace zmqpp;
-
 class User {
 private:
-    string name;
-    string password;
-    string netId;
+    std::string name;
+    std::string password;
+    std::string netId;
     bool connected;
-    list<string> contacts;
+    std::list<std::string> contacts;
 
 public:
     User() {}
-    User(const string& name, const string& pwd, const string& id)
+    User(const std::string& name, const std::string& pwd, const std::string& id)
           : name(name), password(pwd), netId(id), connected(false) {}
 
-    bool isPassword(const string& pwd) const {
+    bool isPassword(const std::string& pwd) const {
         return password == pwd;
     }
-    void connect(const string& id) {
+    void connect(const std::string& id) {
         connected = true;
         netId = id;
     }
 
-    bool inContacts(string& user) {
-        for (int i = 0; i < contacts.size(); ++i) {
+    bool inContacts(std::string& user) {
+        for (size_t i = 0; i < contacts.size(); ++i) {
             if (contacts.front() == user) return true;
             contacts.pop_front();
         }
@@ -44,16 +42,18 @@ public:
 class ServerState {
 private:
     // connected users
-    unordered_map<string, User> users;
+    std::unordered_map<std::string, User> users;
 
 public:
     ServerState() {}
 
-    void newUser(const string& name, const string& pwd, const string& id) {
+    void newUser(const std::string& name, const std::string& pwd,
+                 const std::string& id) {
         users[name] = User(name, pwd, id);
     }
 
-    bool login(const string& name, const string& pwd, const string& id) {
+    bool login(const std::string& name, const std::string& pwd,
+               const std::string& id) {
         if (users.count(name)) {
             // User is registered
             bool ok = users[name].isPassword(pwd);
@@ -63,7 +63,7 @@ public:
         return false;
     }
 
-    User getUser(string& name) {
+    User getUser(std::string& name) {
         if (users.count(name))
             return users[name];
         else {
@@ -72,79 +72,83 @@ public:
     }
 };
 
-void login(message& msg, const string& sender, ServerState& server) {
-    string userName;
+void login(zmqpp::message& msg, const std::string& sender,
+           ServerState& server) {
+    std::string userName;
     msg >> userName;
-    string password;
+    std::string password;
     msg >> password;
     if (server.login(userName, password, sender)) {
-        cout << "User " << userName << " joins the chat server" << endl;
+        std::cout << "User " << userName << " joins the chat server"
+                  << std::endl;
     } else {
-        cerr << "Wrong user/password " << endl;
+        std::cerr << "Wrong user/password " << std::endl;
     }
 }
 
-void sendMessage(message& msg, const string& sender, ServerState& server) {
-    string nameSender;  // origen del mensaje
+void sendMessage(zmqpp::message& msg, const std::string& /*sender*/,
+                 ServerState& server) {
+    std::string nameSender;  // origen del mensaje
     msg >> nameSender;
 
-    string nameDest;  // Nombre de usuario destino o grupo
+    std::string nameDest;  // Nombre de usuario destino o grupo
     msg >> nameDest;
 
     if (server.getUser(nameSender).inContacts(nameDest) &&
         server.getUser(nameDest).isConnected()) {  // Envio uno a uno
-        string text;
+        std::string text;
         msg >> text;
-        // aqui se supone que se hace el envio a un solo usuario por el socket
+        // aqui se supone que se hace el envio a un solo usuario por el
+        // zmqpp::socket
         // } else if () {  // Envio uno a muchos
     } else {
-        cerr << "User not found in contacts/offline" << endl;
+        std::cerr << "User not found in contacts/offline" << std::endl;
     }
 }
 
-void dispatch(message& msg, ServerState& server) {
+void dispatch(zmqpp::message& msg, ServerState& server) {
     assert(msg.parts() > 2);
-    string sender;
+    std::string sender;
     msg >> sender;
 
-    string action;
+    std::string action;
     msg >> action;
 
     if (action == "login") {
         login(msg, sender, server);
 
     } else if (action == "newUser") {
-        string name;
+        std::string name;
         msg >> name;
 
-        string pwd;
+        std::string pwd;
         msg >> pwd;
 
         server.newUser(name, pwd, sender);
 
-    } else if (action == "message") {
+    } else if (action == "zmqpp::message") {
         sendMessage(msg, sender, server);
     } else {
-        cerr << "Action not supported/implemented" << endl;
+        std::cerr << "Action not supported/implemented" << std::endl;
     }
 }
 
-int main(int argc, char* argv[]) {
-    const string endpoint = "tcp://*:4242";
-    context ctx;
+int main(/*int argc, char* argv[]*/) {
+    const std::string endpoint = "tcp://*:4242";
+    zmqpp::context ctx;
 
-    socket s(ctx, socket_type::xreply);
+    zmqpp::socket s(ctx, zmqpp::socket_type::xreply);
     s.bind(endpoint);
 
     ServerState state;
     state.newUser("sebas", "123", "");
     while (true) {
-        message req;
+        zmqpp::message req;
         s.receive(req);
         dispatch(req, state);
     }
 
-    cout << "Finished." << endl;
+    std::cout << "Finished." << std::endl;
 }
 
 // Formato para enviar mensaje luego de haber sido logueado
