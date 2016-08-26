@@ -69,6 +69,9 @@ else()
     set(THIRD_PARTY_INCLUDE_DIRS ${ZEROMQ_INCLUDE} ${ZMQPP_INCLUDE})
 endif()
 
+set(THIRD_PARTY_INCLUDE_DIRS ${THIRD_PARTY_INCLUDE_DIRS}
+    "${CMAKE_SOURCE_DIR}/third_party/msgpack-c/include")
+
 ###############################################################################
 ## Project configuration
 
