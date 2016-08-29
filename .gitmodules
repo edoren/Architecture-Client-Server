@@ -1,9 +1,9 @@
 [submodule "third_prty/zmq"]
 	path = third_party/zmq
 	url = https://github.com/zeromq/zeromq4-1.git
-[submodule "third_party/zmqpp"]
-	path = third_party/zmqpp
-	url = https://github.com/zeromq/zmqpp.git
 [submodule "third_party/msgpack-c"]
 	path = third_party/msgpack-c
 	url = https://github.com/msgpack/msgpack-c.git
+[submodule "third_party/cppzmq"]
+	path = third_party/cppzmq
+	url = https://github.com/zeromq/cppzmq.git
