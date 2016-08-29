@@ -1,5 +1,8 @@
+#include <iostream>
 #include <string>
-#include <zmqpp/zmqpp.hpp>
+#include <zmq.hpp>
+
+#include <Util/Serializer.hpp>
 
 int main(int argc, char** argv) {
     const std::string endpoint = "tcp://localhost:4242";
@@ -27,15 +30,14 @@ int main(int argc, char** argv) {
     }
 
     // initialize the 0MQ context
-    zmqpp::context context;
+    zmq::context_t context;
 
     // generate a request socket
-    zmqpp::socket_type type = zmqpp::socket_type::request;
-    zmqpp::socket socket(context, type);
+    zmq::socket_t socket(context, ZMQ_REQ);
     socket.connect(endpoint);
 
     // send a message
-    zmqpp::message request, response;
+    Serializer request;
 
     // compose a message from a operation and a matrices
     request << operation;
@@ -43,10 +45,14 @@ int main(int argc, char** argv) {
         request << matrix;
     }
     std::cout << "Sending matrices.\n";
-    socket.send(request);
+    socket.send(request.data(), request.size());
 
     std::string result;
-    socket.receive(response);
+
+    zmq::message_t msg;
+    socket.recv(&msg);
+    Deserializer response(static_cast<char*>(msg.data()), msg.size());
+
     response >> result;
 
     std::cout << "Result: " << result << "\n";

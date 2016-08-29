@@ -5,11 +5,9 @@
 
 #include "MsgPackAdaptors.hpp"
 
-using Buffer = msgpack::sbuffer;
-
 class Serializer {
 public:
-    Serializer(Buffer& stream) : packer_(stream) {}
+    Serializer() : buffer_(), packer_(buffer_) {}
 
     template <typename D>
     Serializer& operator<<(const D& data) {
@@ -17,8 +15,21 @@ public:
         return *this;
     }
 
+    char* data() {
+        return buffer_.data();
+    }
+
+    const char* data() const {
+        return buffer_.data();
+    }
+
+    size_t size() const {
+        return buffer_.size();
+    };
+
 private:
-    msgpack::packer<Buffer> packer_;
+    msgpack::sbuffer buffer_;
+    msgpack::packer<msgpack::sbuffer> packer_;
 };
 
 class Deserializer {
@@ -29,7 +40,7 @@ public:
         unpacker_.buffer_consumed(size);
     }
 
-    Deserializer(const Buffer& buffer)
+    Deserializer(const msgpack::sbuffer& buffer)
           : Deserializer(buffer.data(), buffer.size()) {}
 
     template <typename D>

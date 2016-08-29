@@ -53,6 +53,10 @@ public:
         return false;
     }
 
+    const std::vector<T>& GetData() const {
+        return data_;
+    }
+
     RVector<T> GetRow(size_t pos) {
         if (pos >= NumRows()) {
             // If out of bounds return an empty RVector
@@ -65,7 +69,7 @@ public:
             data[i] = &(*this)(i, pos);
         }
 
-        return RVector<T>(std::move(data));
+        return RVector<T>(data);
     }
 
     RVector<T> GetCol(size_t pos) {
@@ -80,7 +84,7 @@ public:
             data[j] = &(*this)(pos, j);
         }
 
-        return RVector<T>(std::move(data));
+        return RVector<T>(data);
     }
 
     T& operator()(size_t x, size_t y) {

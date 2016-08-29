@@ -4,8 +4,9 @@
 #include <string>
 #include <vector>
 
-#include <zmqpp/zmqpp.hpp>
+#include <zmq.hpp>
 
+#include <Util/Serializer.hpp>
 #include <Util/Matrix.hpp>
 #include <Util/LinearAlgebra.hpp>
 
@@ -88,11 +89,10 @@ int main(int /*argc*/, char** /*argv*/) {
     const std::string endpoint = "tcp://*:4242";
 
     // initialize the 0MQ context
-    zmqpp::context context;
+    zmq::context_t context;
 
     // generate a reply socket
-    zmqpp::socket_type type = zmqpp::socket_type::reply;
-    zmqpp::socket socket(context, type);
+    zmq::socket_t socket(context, ZMQ_REP);
 
     // bind to the socket
     std::cout << "Binding to " << endpoint << "...\n";
@@ -100,8 +100,10 @@ int main(int /*argc*/, char** /*argv*/) {
 
     while (true) {
         // receive the message and process it
-        zmqpp::message request, response;
-        socket.receive(request);
+        zmq::message_t msg;
+        socket.recv(&msg);
+        Deserializer request(static_cast<char*>(msg.data()), msg.size());
+        Serializer response;
 
         std::cout << "Receiving message...\n";
 
@@ -155,6 +157,7 @@ int main(int /*argc*/, char** /*argv*/) {
         }
 
         response << stream.str();
-        socket.send(response);
+
+        socket.send(response.data(), response.size());
     }
 }
