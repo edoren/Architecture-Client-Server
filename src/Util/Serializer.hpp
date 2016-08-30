@@ -34,6 +34,8 @@ private:
 
 class Deserializer {
 public:
+    Deserializer() : unpacker_() {}
+
     Deserializer(const char* data, size_t size) {
         unpacker_.reserve_buffer(size);
         std::memcpy(unpacker_.buffer(), data, size);
