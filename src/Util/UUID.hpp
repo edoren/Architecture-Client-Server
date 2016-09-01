@@ -1,5 +1,8 @@
 #pragma once
 
+#include <random>
+#include <string>
+
 class UUID {
 private:
     UUID() = default;
