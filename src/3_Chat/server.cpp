@@ -23,6 +23,7 @@ using NetIdentity = std::string;
 class User {
 public:
     User() {}
+
     User(const std::string& username, const std::string& password)
           : username_(username), password_(password) {}
 
@@ -44,10 +45,44 @@ private:
     std::unordered_set<std::string> contacts_;
 };
 
+class Group {
+public:
+    Group() {}
+
+    Group(const std::string& name, const std::string& owner)
+          : name_(name), owner_(owner) {}
+
+    bool AddMember(const std::string& username) {
+        return members_.insert(username).second;
+    }
+
+    bool RemoveMember(const std::string& username) {
+        return members_.erase(username) > 0;
+    }
+
+    bool IsMember(const std::string& username) const {
+        auto it = members_.find(username);
+        return it != members_.end();
+    }
+
+    const std::string& GetName() const {
+        return name_;
+    }
+
+private:
+    std::string name_;
+    std::string owner_;
+    std::unordered_set<std::string> members_;
+};
+
 class DataBase {
 public:
     User& AddUser(User&& user) {
         return users_[user.GetUsername()] = user;
+    }
+
+    Group& AddGroup(Group&& group) {
+        return groups_[group.GetName()] = group;
     }
 
     User& GetUser(const std::string& username) {
@@ -59,8 +94,14 @@ public:
         return it != users_.end();
     }
 
+    bool GroupExists(const std::string& group_name) const {
+        auto it = groups_.find(group_name);
+        return it != groups_.end();
+    }
+
 private:
     std::unordered_map<std::string, User> users_;
+    std::unordered_map<std::string, Group> groups_;
 };
 
 class ServerState {
@@ -163,11 +204,27 @@ public:
             return ServerCodes::USER_INCORRECT_TOKEN;
 
         Serializer update;
-        update << "update" << "whisper" << username << content;
+        update << "update"
+               << "whisper" << username << content;
         for (auto& identities : GetIdentities(recipient)) {
             socket_.send(identities, ZMQ_SNDMORE);
             socket_.send(update);
         }
+
+        return ServerCodes::SUCCESS;
+    }
+
+    ServerCodes CreateGroup(const std::string& username,
+                            const std::string& token,
+                            const std::string& group_name) {
+        if (!UserConnected(username)) return ServerCodes::USER_NOT_CONNECTED;
+
+        if (GetToken(username) != token)
+            return ServerCodes::USER_INCORRECT_TOKEN;
+
+        if (database_.GroupExists(group_name)) return ServerCodes::GROUP_ALREADY_EXIST;
+
+        database_.AddGroup({group_name, username});
 
         return ServerCodes::SUCCESS;
     }
@@ -212,6 +269,7 @@ private:
     // Server state
     std::unordered_set<NetIdentity> identities_;
     std::unordered_map<std::string, UserConnection> users_;
+    std::unordered_map<std::string, Group*> groups_;
 };
 
 void Login(ServerState& server, const NetIdentity& identity,
@@ -282,7 +340,20 @@ void Whisper(ServerState& server, Deserializer& request, Serializer& response) {
     if (result == ServerCodes::SUCCESS) {
         response << true;
     } else {
-        std::string error_message = "LEL";
+        std::string error_message = "Message not sent.";
+        response << false << error_message;
+    }
+}
+
+void CreateGroup(ServerState& server, Deserializer& request, Serializer& response) {
+    std::string username, token, group_name;
+    request >> username >> token >> group_name;
+    ServerCodes result = server.CreateGroup(username, token, group_name);
+    if (result == ServerCodes::SUCCESS) {
+        std::cout << "Group '" << group_name << "' created, owner '" << username << "'\n";
+        response << true;
+    } else {
+        std::string error_message = "Could not create group.";
         response << false << error_message;
     }
 }
@@ -310,6 +381,8 @@ void Dispatch(ServerState& server) {
         AddContact(server, request, response);
     } else if (action == "whisper") {  // Unicast chat
         Whisper(server, request, response);
+    } else if (action == "create_group") {  // Unicast chat
+        CreateGroup(server, request, response);
     } else {
         std::cerr << "Action not supported/implemented\n";
     }

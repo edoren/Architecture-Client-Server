@@ -3,8 +3,7 @@
 #include <ostream>
 
 enum class ServerCodes : int {
-    SUCCESS = 0,
-    OK = 0,
+    SUCCESS, OK = 0,
 
     // Network connection codes
     IDENTITY_NOT_CONNECTED = 0x3E8,
@@ -18,6 +17,10 @@ enum class ServerCodes : int {
     USER_WRONG_PASSWORD,
     USER_INCORRECT_IDENTITY,
     USER_INCORRECT_TOKEN,
+
+    // Group related codes
+    GROUP_ALREADY_EXIST = 0xBB8,
+    GROUP_DOES_NOT_EXIST
 };
 
 std::ostream& operator<<(std::ostream& o, ServerCodes code) {

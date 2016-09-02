@@ -38,7 +38,6 @@ public:
         is_running_ = false;
         listener_.join();
         socket_.close();
-        context_.close();
     }
 
     bool Register(const std::string& username, const std::string password) {
@@ -81,6 +80,14 @@ public:
         Serializer request;
         request << "whisper" << username_ << token_ << recipient << tcontent;
         if (socket_.send(request)) last_action_ = "whisper";
+        return true;
+    }
+
+    bool CreateGroup(const std::string& group_name) {
+        if (username_.empty()) return false;
+        Serializer request;
+        request << "create_group" << username_ << token_ << group_name;
+        if (socket_.send(request)) last_action_ = "create_group";
         return true;
     }
 
@@ -186,6 +193,10 @@ bool HandleCommands(ChatClient& client, const std::string& line) {
         stream >> receiver;
         std::getline(stream, content);
         client.Whisper(receiver, content);
+    } else if (action == "/create_group") {
+        std::string group_name;
+        stream >> group_name;
+        client.CreateGroup(group_name);
     } else {
         std::cout << "Action not supported or implemented.\n";
     }
