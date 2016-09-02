@@ -12,6 +12,8 @@
 
 #include "ServerCodes.hpp"
 
+// TODO: Check if incomming parameters are valid
+
 static volatile std::sig_atomic_t gSignalStatus = 0;
 
 static void gSignalHandler(int signal_value) {
@@ -47,6 +49,9 @@ private:
 
 class Group {
 public:
+    using MemberSet = std::unordered_set<std::string>;
+
+public:
     Group() {}
 
     Group(const std::string& name, const std::string& owner)
@@ -69,10 +74,14 @@ public:
         return name_;
     }
 
+    const MemberSet& GetMembers() const {
+        return members_;
+    }
+
 private:
     std::string name_;
     std::string owner_;
-    std::unordered_set<std::string> members_;
+    MemberSet members_;
 };
 
 class DataBase {
@@ -210,8 +219,8 @@ public:
         Serializer update;
         update << "update"
                << "whisper" << username << content;
-        for (auto& identities : GetIdentities(recipient)) {
-            socket_.send(identities, ZMQ_SNDMORE);
+        for (auto& identity : GetIdentities(recipient)) {
+            socket_.send(identity, ZMQ_SNDMORE);
             socket_.send(update);
         }
 
@@ -229,7 +238,8 @@ public:
         if (database_.GroupExists(group_name))
             return ServerCodes::GROUP_ALREADY_EXIST;
 
-        database_.AddGroup({group_name, username});
+        Group& group = database_.AddGroup({group_name, username});
+        group.AddMember(username);
 
         return ServerCodes::SUCCESS;
     }
@@ -247,6 +257,37 @@ public:
         Group& group = database_.GetGroup(group_name);
         if (!group.AddMember(username))
             return ServerCodes::GROUP_MEMBER_ALREADY_EXIST;
+
+        return ServerCodes::SUCCESS;
+    }
+
+    ServerCodes MessageGroup(const std::string& username,
+                             const std::string& token,
+                             const std::string& group_name,
+                             const std::string& content) {
+        if (!UserConnected(username)) return ServerCodes::USER_NOT_CONNECTED;
+
+        if (GetToken(username) != token)
+            return ServerCodes::USER_INCORRECT_TOKEN;
+
+        if (!database_.GroupExists(group_name))
+            return ServerCodes::GROUP_DOES_NOT_EXIST;
+
+        Group& group = database_.GetGroup(group_name);
+        if (!group.IsMember(username))
+            return ServerCodes::GROUP_MEMBER_DOES_NOT_EXIST;
+
+        Serializer update;
+        update << "update"
+               << "msg_group" << group_name << username << content;
+        for (auto& member : group.GetMembers()) {
+            if (UserConnected(member)) {
+                for (auto& identity : GetIdentities(member)) {
+                    socket_.send(identity, ZMQ_SNDMORE);
+                    socket_.send(update);
+                }
+            }
+        }
 
         return ServerCodes::SUCCESS;
     }
@@ -396,6 +437,20 @@ void JoinGroup(ServerState& server, Deserializer& request,
     }
 }
 
+void MessageGroup(ServerState& server, Deserializer& request,
+                  Serializer& response) {
+    std::string username, token, group_name, content;
+    request >> username >> token >> group_name >> content;
+    ServerCodes result =
+        server.MessageGroup(username, token, group_name, content);
+    if (result == ServerCodes::SUCCESS) {
+        response << true;
+    } else {
+        std::string error_message = "Message not sent to group.";
+        response << false << error_message;
+    }
+}
+
 void Dispatch(ServerState& server) {
     std::string identity;
     Deserializer request;
@@ -423,6 +478,8 @@ void Dispatch(ServerState& server) {
         CreateGroup(server, request, response);
     } else if (action == "join_group") {
         JoinGroup(server, request, response);
+    } else if (action == "msg_group") {
+        MessageGroup(server, request, response);
     } else {
         std::cerr << "Action not supported/implemented\n";
     }

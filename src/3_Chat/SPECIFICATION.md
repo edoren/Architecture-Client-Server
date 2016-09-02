@@ -136,3 +136,17 @@ this document: https://github.com/msgpack/msgpack/blob/master/spec.md
     +--------------+----------+-------+------------+
     | "join_group" | username | token | group_name |
     +--------------+----------+-------+------------+
+
+### Message Group (Chat Multicast)
+
+**Request**
+
+    +-------------+----------+-------+------------+---------+
+    | "msg_group" | username | token | group_name | content |
+    +-------------+----------+-------+------------+---------+
+
+**Update**
+
+    +----------+-------------+------------+--------+---------+
+    | "update" | "msg_group" | group_name | sender | content |
+    +----------+-------------+------------+--------+---------+

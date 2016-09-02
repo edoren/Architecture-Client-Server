@@ -84,7 +84,7 @@ public:
     }
 
     bool CreateGroup(const std::string& group_name) {
-        if (username_.empty()) return false;
+        if (username_.empty() || group_name.empty()) return false;
         Serializer request;
         request << "create_group" << username_ << token_ << group_name;
         if (socket_.send(request)) last_action_ = "create_group";
@@ -96,6 +96,17 @@ public:
         Serializer request;
         request << "join_group" << username_ << token_ << group_name;
         if (socket_.send(request)) last_action_ = "join_group";
+        return true;
+    }
+
+    bool MessageGroup(const std::string& group_name,
+                      const std::string content) {
+        std::string tcontent = TrimSpaces(content);
+        if (username_.empty() || group_name.empty() || tcontent.empty())
+            return false;
+        Serializer request;
+        request << "msg_group" << username_ << token_ << group_name << tcontent;
+        if (socket_.send(request)) last_action_ = "msg_group";
         return true;
     }
 
@@ -156,7 +167,16 @@ private:
         if (type == "whisper") {
             std::string sender, content;
             response >> sender >> content;
+            if (sender == username_)
+                return;  // Ignore the message if is sent by the user
             std::cout << "[whisper] " << sender << ": " << content << "\n";
+        } else if (type == "msg_group") {
+            std::string group_name, sender, content;
+            response >> group_name >> sender >> content;
+            if (sender == username_)
+                return;  // Ignore the message if is sent by the user
+            std::cout << "[" << group_name << "] " << sender << ": " << content
+                      << "\n";
         }
     }
 
@@ -211,6 +231,11 @@ bool HandleCommands(ChatClient& client, const std::string& line) {
         std::string group_name;
         stream >> group_name;
         client.JoinGroup(group_name);
+    } else if (action == "/msg_group") {
+        std::string group_name, content;
+        stream >> group_name;
+        std::getline(stream, content);
+        client.MessageGroup(group_name, content);
     } else {
         std::cout << "Action not supported or implemented.\n";
     }

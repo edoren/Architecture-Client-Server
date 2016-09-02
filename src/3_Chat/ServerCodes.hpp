@@ -21,7 +21,8 @@ enum class ServerCodes : int {
     // Group related codes
     GROUP_ALREADY_EXIST = 0x2FF,
     GROUP_DOES_NOT_EXIST,
-    GROUP_MEMBER_ALREADY_EXIST
+    GROUP_MEMBER_ALREADY_EXIST,
+    GROUP_MEMBER_DOES_NOT_EXIST
 };
 
 std::ostream& operator<<(std::ostream& o, ServerCodes code) {
