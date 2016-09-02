@@ -91,6 +91,14 @@ public:
         return true;
     }
 
+    bool JoinGroup(const std::string& group_name) {
+        if (username_.empty()) return false;
+        Serializer request;
+        request << "join_group" << username_ << token_ << group_name;
+        if (socket_.send(request)) last_action_ = "join_group";
+        return true;
+    }
+
 private:
     void ResponseListener() {
         Deserializer server_msg;
@@ -134,6 +142,8 @@ private:
             // ???
         } else if (last_action_ == "create_group") {
             std::cout << "Group creation successful.\n";
+        } else if (last_action_ == "join_group") {
+            std::cout << "Group join successful.\n";
         }
 
         last_action_.clear();
@@ -146,7 +156,7 @@ private:
         if (type == "whisper") {
             std::string sender, content;
             response >> sender >> content;
-            std::cout << "whisper from " << sender << ": " << content << "\n";
+            std::cout << "[whisper] " << sender << ": " << content << "\n";
         }
     }
 
@@ -197,6 +207,10 @@ bool HandleCommands(ChatClient& client, const std::string& line) {
         std::string group_name;
         stream >> group_name;
         client.CreateGroup(group_name);
+    } else if (action == "/join_group") {
+        std::string group_name;
+        stream >> group_name;
+        client.JoinGroup(group_name);
     } else {
         std::cout << "Action not supported or implemented.\n";
     }

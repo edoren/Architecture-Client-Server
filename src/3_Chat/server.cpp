@@ -89,6 +89,10 @@ public:
         return users_.find(username)->second;
     }
 
+    Group& GetGroup(const std::string& group_name) {
+        return groups_.find(group_name)->second;
+    }
+
     bool UserExists(const std::string& username) const {
         auto it = users_.find(username);
         return it != users_.end();
@@ -222,9 +226,27 @@ public:
         if (GetToken(username) != token)
             return ServerCodes::USER_INCORRECT_TOKEN;
 
-        if (database_.GroupExists(group_name)) return ServerCodes::GROUP_ALREADY_EXIST;
+        if (database_.GroupExists(group_name))
+            return ServerCodes::GROUP_ALREADY_EXIST;
 
         database_.AddGroup({group_name, username});
+
+        return ServerCodes::SUCCESS;
+    }
+
+    ServerCodes JoinGroup(const std::string& username, const std::string& token,
+                          const std::string& group_name) {
+        if (!UserConnected(username)) return ServerCodes::USER_NOT_CONNECTED;
+
+        if (GetToken(username) != token)
+            return ServerCodes::USER_INCORRECT_TOKEN;
+
+        if (!database_.GroupExists(group_name))
+            return ServerCodes::GROUP_DOES_NOT_EXIST;
+
+        Group& group = database_.GetGroup(group_name);
+        if (!group.AddMember(username))
+            return ServerCodes::GROUP_MEMBER_ALREADY_EXIST;
 
         return ServerCodes::SUCCESS;
     }
@@ -269,7 +291,6 @@ private:
     // Server state
     std::unordered_set<NetIdentity> identities_;
     std::unordered_map<std::string, UserConnection> users_;
-    std::unordered_map<std::string, Group*> groups_;
 };
 
 void Login(ServerState& server, const NetIdentity& identity,
@@ -278,7 +299,7 @@ void Login(ServerState& server, const NetIdentity& identity,
     request >> username >> password;
     ServerCodes result = server.Login(identity, username, password);
     if (result == ServerCodes::SUCCESS) {
-        std::cout << "User '" << username << "' joins the chat server\n";
+        std::cout << "[User] '" << username << "' joins the chat server\n";
         response << true << username << server.GetToken(username);
     } else {
         std::string error_message;
@@ -297,7 +318,7 @@ void AddContact(ServerState& server, Deserializer& request,
     request >> username >> token >> contact;
     ServerCodes result = server.AddContact(username, token, contact);
     if (result == ServerCodes::SUCCESS) {
-        std::cout << "User '" << username << "' added '" << contact << "'\n";
+        std::cout << "[User] '" << username << "' added '" << contact << "'\n";
         response << true;
     } else {
         std::string error_message = "Could not add user.";
@@ -311,7 +332,7 @@ void Logout(ServerState& server, const NetIdentity& identity,
     request >> username;
     ServerCodes result = server.Logout(identity, username);
     if (result == ServerCodes::SUCCESS) {
-        std::cout << "User '" << username << "' disconected.\n";
+        std::cout << "[User] '" << username << "' disconected.\n";
         response << true;
     } else {
         std::string error_message = "Could not logout, please login first.";
@@ -324,7 +345,7 @@ void Register(ServerState& server, Deserializer& request,
     std::string username, password;
     request >> username >> password;
     if (server.Register(username, password) == ServerCodes::SUCCESS) {
-        std::cout << "User '" << username << "' just registered\n";
+        std::cout << "[User] '" << username << "' just registered\n";
         response << true;
     } else {
         std::string error_message = "Error registering: username '" + username +
@@ -345,15 +366,32 @@ void Whisper(ServerState& server, Deserializer& request, Serializer& response) {
     }
 }
 
-void CreateGroup(ServerState& server, Deserializer& request, Serializer& response) {
+void CreateGroup(ServerState& server, Deserializer& request,
+                 Serializer& response) {
     std::string username, token, group_name;
     request >> username >> token >> group_name;
     ServerCodes result = server.CreateGroup(username, token, group_name);
     if (result == ServerCodes::SUCCESS) {
-        std::cout << "Group '" << group_name << "' created, owner '" << username << "'\n";
+        std::cout << "[Group] '" << group_name << "' created, owner '"
+                  << username << "'\n";
         response << true;
     } else {
         std::string error_message = "Could not create group.";
+        response << false << error_message;
+    }
+}
+
+void JoinGroup(ServerState& server, Deserializer& request,
+               Serializer& response) {
+    std::string username, token, group_name;
+    request >> username >> token >> group_name;
+    ServerCodes result = server.JoinGroup(username, token, group_name);
+    if (result == ServerCodes::SUCCESS) {
+        std::cout << "[Group] '" << username << "' just joined '" << group_name
+                  << "'\n";
+        response << true;
+    } else {
+        std::string error_message = "Could not join group.";
         response << false << error_message;
     }
 }
@@ -381,8 +419,10 @@ void Dispatch(ServerState& server) {
         AddContact(server, request, response);
     } else if (action == "whisper") {  // Unicast chat
         Whisper(server, request, response);
-    } else if (action == "create_group") {  // Unicast chat
+    } else if (action == "create_group") {
         CreateGroup(server, request, response);
+    } else if (action == "join_group") {
+        JoinGroup(server, request, response);
     } else {
         std::cerr << "Action not supported/implemented\n";
     }
