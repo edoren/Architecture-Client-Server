@@ -50,23 +50,35 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/release/bin")
 ###############################################################################
 ## Third party libraries configuration
 
-# Find ZMQ and ZMQPP
+# Find ZMQ
 find_package(ZMQ)
-find_package(ZMQPP)
-if (ZMQ_FOUND AND ZMQPP_FOUND)
-    set(THIRD_PARTY_LIBRARIES ${ZMQ_LIBRARIES} ${ZMQPP_LIBRARIES})
-    set(THIRD_PARTY_INCLUDE_DIRS ${ZMQ_INCLUDE_DIRS} ${ZMQPP_INCLUDE_DIRS})
-else()
+if(NOT ZMQ_FOUND)
     message(STATUS "Building ZMQ from source.")
     add_subdirectory("${CMAKE_SOURCE_DIR}/third_party/zmq" EXCLUDE_FROM_ALL)
-    set(ZEROMQ_INCLUDE "${CMAKE_SOURCE_DIR}/third_party/zmq/include")
-    set(CPPZMQ_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/third_party/cppzmq")
-    set(THIRD_PARTY_LIBRARIES ${THIRD_PARTY_LIBRARIES} libzmq)
-    set(THIRD_PARTY_INCLUDE_DIRS ${ZEROMQ_INCLUDE} ${CPPZMQ_INCLUDE_DIR})
+    set(ZMQ_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/third_party/zmq/include")
+    set(ZMQ_LIBRARY libzmq)
 endif()
 
-set(THIRD_PARTY_INCLUDE_DIRS ${THIRD_PARTY_INCLUDE_DIRS}
+# Add CPPZMQ
+set(CPPZMQ_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/third_party/cppzmq")
+
+# Add MessagePack
+set(MESSAGE_PACK_INCLUDE_DIR
     "${CMAKE_SOURCE_DIR}/third_party/msgpack-c/include")
+
+# Find SFML
+find_package(SFML 2 COMPONENTS system audio)
+if(NOT SFML_FOUND)
+    add_subdirectory("${CMAKE_SOURCE_DIR}/third_party/SFML" EXCLUDE_FROM_ALL)
+    set(SFML_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/third_party/SFML/include")
+    set(SFML_LIBRARIES sfml-main sfml-system sfml-audio)
+endif()
+
+include_directories(SYSTEM
+    ${ZMQ_INCLUDE_DIR}
+    ${CPPZMQ_INCLUDE_DIR}
+    ${MESSAGE_PACK_INCLUDE_DIR}
+    ${SFML_INCLUDE_DIR})
 
 ###############################################################################
 ## Project configuration

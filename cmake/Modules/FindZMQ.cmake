@@ -2,9 +2,14 @@
 #
 # Once done this will define:
 #
-#   ZMQ_FOUND - System has ZMQ
+#   ZMQ_FOUND        - System has ZMQ
 #   ZMQ_INCLUDE_DIRS - The ZMQ include directory
-#   ZMQ_LIBRARIES - The ZMQ library
+#   ZMQ_LIBRARIES    - The ZMQ library
+#
+# It also defines:
+#
+#   ZMQ_INCLUDE_DIR - Same as ZMQ_INCLUDE_DIRS
+#   ZMQ_LIBRARY     - Same as ZMQ_LIBRARIES
 #
 
 find_path(ZMQ_INCLUDE_DIR NAMES zmq.h)
