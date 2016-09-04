@@ -217,8 +217,7 @@ public:
             return ServerCodes::USER_INCORRECT_TOKEN;
 
         Serializer update;
-        update << "update"
-               << "whisper" << username << content;
+        update << ("update") << ("whisper") << username << content;
         for (auto& identity : GetIdentities(recipient)) {
             socket_.send(identity, ZMQ_SNDMORE);
             socket_.send(update);
@@ -287,6 +286,28 @@ public:
                     socket_.send(update);
                 }
             }
+        }
+
+        return ServerCodes::SUCCESS;
+    }
+
+    ServerCodes SendVoiceMessage(const std::string& username,
+                                 const std::string& token,
+                                 const std::string& recipient,
+                                 size_t channels, size_t sample_rate,
+                                 const std::vector<int16_t> samples) {
+        if (!UserConnected(username) || !UserConnected(recipient))
+            return ServerCodes::USER_NOT_CONNECTED;
+
+        if (GetToken(username) != token)
+            return ServerCodes::USER_INCORRECT_TOKEN;
+
+        Serializer update;
+        update << ("update") << ("voice_msg") << username << channels
+               << sample_rate << samples;
+        for (auto& identity : GetIdentities(recipient)) {
+            socket_.send(identity, ZMQ_SNDMORE);
+            socket_.send(update);
         }
 
         return ServerCodes::SUCCESS;
@@ -451,6 +472,23 @@ void MessageGroup(ServerState& server, Deserializer& request,
     }
 }
 
+void SendVoiceMessage(ServerState& server, Deserializer& request,
+                      Serializer& response) {
+    std::string username, token, recipient;
+    size_t channels, sample_rate;
+    std::vector<int16_t> samples;
+    request >> username >> token >> recipient >> channels >> sample_rate >>
+        samples;
+    ServerCodes result = server.SendVoiceMessage(
+        username, token, recipient, channels, sample_rate, samples);
+    if (result == ServerCodes::SUCCESS) {
+        response << true;
+    } else {
+        std::string error_message = "Message not sent to group.";
+        response << false << error_message;
+    }
+}
+
 void Dispatch(ServerState& server) {
     std::string identity;
     Deserializer request;
@@ -480,6 +518,8 @@ void Dispatch(ServerState& server) {
         JoinGroup(server, request, response);
     } else if (action == "msg_group") {
         MessageGroup(server, request, response);
+    } else if (action == "voice_msg") {
+        SendVoiceMessage(server, request, response);
     } else {
         std::cerr << "Action not supported/implemented\n";
     }

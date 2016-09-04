@@ -7,6 +7,8 @@
 #include <string>
 #include <thread>
 
+#include <SFML/Audio.hpp>
+
 #include <Util/Serializer.hpp>
 #include <Util/ZMQWrapper.hpp>
 
@@ -21,6 +23,8 @@ std::string TrimSpaces(const std::string& str) {
     size_t last = str.find_last_not_of(' ');
     return str.substr(first, (last - first + 1));
 }
+
+sf::SoundBuffer g_buffer;
 
 class ChatClient {
 public:
@@ -110,6 +114,18 @@ public:
         return true;
     }
 
+    bool SendVoiceMessage(const std::string& recipient, size_t channels,
+                          size_t sample_rate,
+                          const std::vector<int16_t>& samples) {
+        if (recipient.empty()) return false;
+
+        Serializer request;
+        request << "voice_msg" << username_ << token_ << recipient << channels
+                << sample_rate << samples;
+        if (socket_.send(request)) last_action_ = "voice_msg";
+        return true;
+    }
+
 private:
     void ResponseListener() {
         Deserializer server_msg;
@@ -177,6 +193,16 @@ private:
                 return;  // Ignore the message if is sent by the user
             std::cout << "[" << group_name << "] " << sender << ": " << content
                       << "\n";
+        } else if (type == "voice_msg") {
+            std::string sender;
+            size_t channels, sample_rate;
+            std::vector<int16_t> samples;
+            response >> sender >> channels >> sample_rate >> samples;
+            g_buffer.loadFromSamples(samples.data(), samples.size(), channels,
+                                     sample_rate);
+            std::cout
+                << "[ALERT] " << sender
+                << "just send you a voice message, write /play to listen it.\n";
         }
     }
 
@@ -196,6 +222,45 @@ private:
 
     std::thread listener_;  // The listener of responses and updates
 };
+
+
+bool RecordAndSend(ChatClient& client, const std::string& recipient) {
+    if (!sf::SoundRecorder::isAvailable()) {
+        std::cerr << "Sorry, audio capture is not supported by your system\n";
+        return false;
+    }
+
+    if (recipient.empty()) {
+        std::cerr << "Usage: /record [recipient]\n";
+        return false;
+    }
+
+    unsigned int sample_rate = 44100;
+
+    sf::SoundBufferRecorder recorder;
+
+    recorder.start(sample_rate);
+    std::cout << "Recording... press enter to stop";
+    std::cin.ignore(10000, '\n');
+    recorder.stop();
+
+    const sf::SoundBuffer& buffer = recorder.getBuffer();
+
+    // Display captured sound informations
+    std::cout << "Sound information:\n";
+    std::cout << " " << buffer.getDuration().asSeconds() << " seconds\n";
+    std::cout << " " << buffer.getSampleRate() << " samples / seconds\n";
+    std::cout << " " << buffer.getChannelCount() << " channels\n";
+    std::cout << " " << buffer.getSampleCount() << " samples\n";
+
+    std::vector<int16_t> samples(buffer.getSamples(),
+                                 buffer.getSamples() + buffer.getSampleCount());
+
+    client.SendVoiceMessage(recipient, buffer.getChannelCount(),
+                            buffer.getSampleRate(), samples);
+
+    return true;
+}
 
 bool HandleCommands(ChatClient& client, const std::string& line) {
     std::stringstream stream(line);
@@ -236,6 +301,19 @@ bool HandleCommands(ChatClient& client, const std::string& line) {
         stream >> group_name;
         std::getline(stream, content);
         client.MessageGroup(group_name, content);
+    } else if (action == "/record") {
+        std::string recipient;
+        stream >> recipient;
+        RecordAndSend(client, recipient);
+    } else if (action == "/play") {
+        sf::Sound sound(g_buffer);
+        sound.play();
+
+        while (sound.getStatus() == sf::Sound::Playing) {
+            std::cout << "Playing... \n";
+            sf::sleep(sf::milliseconds(100));
+        }
+        std::cout << "Done.\n";
     } else {
         std::cout << "Action not supported or implemented.\n";
     }

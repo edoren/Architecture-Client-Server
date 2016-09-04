@@ -150,3 +150,27 @@ this document: https://github.com/msgpack/msgpack/blob/master/spec.md
     +----------+-------------+------------+--------+---------+
     | "update" | "msg_group" | group_name | sender | content |
     +----------+-------------+------------+--------+---------+
+
+### Voice Message (Chat Multicast)
+
+**Request**
+
+    +-----------+----------+-------+-------------+----------+-------------+---------+
+    | "voice_msg" | username | token | recipient | channels | sample_rate | samples |
+    +-----------+----------+-------+-------------+----------+-------------+---------+
+
+    recipient: the username of the destination user
+    channels: the number of channels the audio is recorded
+    sample_rate: the audio sample rate
+    samples: a list containing the audio samples
+
+**Update**
+
+    +----------+-------------+--------+----------+-------------+---------+
+    | "update" | "voice_msg" | sender | channels | sample_rate | samples |
+    +----------+-------------+--------+----------+-------------+---------+
+
+    sender: the username who send the voice message
+    channels: the number of channels the audio is recorded
+    sample_rate: the audio sample rate
+    samples: a list containing the audio samples
