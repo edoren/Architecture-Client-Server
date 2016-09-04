@@ -61,18 +61,18 @@ public:
         return true;
     }
 
-    bool AddContact(const std::string& contact) {
-        if (username_.empty() || contact.empty()) return false;
-        Serializer request;
-        request << "add_contact" << username_ << token_ << contact;
-        socket_.send(request);
-        return true;
-    }
-
     bool Logout() {
         if (username_.empty()) return false;
         Serializer request;
         request << "logout" << username_;
+        socket_.send(request);
+        return true;
+    }
+
+    bool AddContact(const std::string& contact) {
+        if (username_.empty() || contact.empty()) return false;
+        Serializer request;
+        request << "add_contact" << username_ << token_ << contact;
         socket_.send(request);
         return true;
     }
@@ -172,20 +172,20 @@ public:
         if (action == "/exit") {
             Logout();
             return false;
-        } else if (action == "/login") {
-            std::string username, password;
-            stream >> username >> password;
-            Login(username, password);
-        } else if (action == "/add") {
-            std::string contact;
-            stream >> contact;
-            AddContact(contact);
-        } else if (action == "/logout") {
-            Logout();
         } else if (action == "/register") {
             std::string username, password;
             stream >> username >> password;
             Register(username, password);
+        } else if (action == "/login") {
+            std::string username, password;
+            stream >> username >> password;
+            Login(username, password);
+        } else if (action == "/logout") {
+            Logout();
+        } else if (action == "/add") {
+            std::string contact;
+            stream >> contact;
+            AddContact(contact);
         } else if (action == "/msg" || action == "/w") {
             std::string receiver, content;
             stream >> receiver;

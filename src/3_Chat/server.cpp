@@ -356,6 +356,17 @@ private:
     std::unordered_map<std::string, UserConnection> users_;
 };
 
+void Register(ServerState& server, Deserializer& request,
+              Serializer& response) {
+    std::string username, password;
+    request >> username >> password;
+    ServerCodes result = server.Register(username, password);
+    response << result;
+    if (result == ServerCodes::SUCCESS) {
+        std::cout << "[User] '" << username << "' just registered\n";
+    }
+}
+
 void Login(ServerState& server, const NetIdentity& identity,
            Deserializer& request, Serializer& response) {
     std::string username, password;
@@ -387,17 +398,6 @@ void AddContact(ServerState& server, Deserializer& request,
     response << result;
     if (result == ServerCodes::SUCCESS) {
         std::cout << "[User] '" << username << "' added '" << contact << "'\n";
-    }
-}
-
-void Register(ServerState& server, Deserializer& request,
-              Serializer& response) {
-    std::string username, password;
-    request >> username >> password;
-    ServerCodes result = server.Register(username, password);
-    response << result;
-    if (result == ServerCodes::SUCCESS) {
-        std::cout << "[User] '" << username << "' just registered\n";
     }
 }
 
