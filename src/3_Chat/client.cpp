@@ -12,6 +12,8 @@
 #include <Util/Serializer.hpp>
 #include <Util/ZMQWrapper.hpp>
 
+#include "ServerCodes.hpp"
+
 static volatile std::sig_atomic_t gSignalStatus = 0;
 
 static void gSignalHandler(int signal_value) {
@@ -46,7 +48,7 @@ public:
         if (username.empty() || password.empty()) return false;
         Serializer request;
         request << "register" << username << password;
-        if (socket_.send(request)) last_action_ = "register";
+        socket_.send(request);
         return true;
     }
 
@@ -55,7 +57,7 @@ public:
             return false;
         Serializer request;
         request << "login" << username << password;
-        if (socket_.send(request)) last_action_ = "login";
+        socket_.send(request);
         return true;
     }
 
@@ -63,7 +65,7 @@ public:
         if (username_.empty() || contact.empty()) return false;
         Serializer request;
         request << "add_contact" << username_ << token_ << contact;
-        if (socket_.send(request)) last_action_ = "add_contact";
+        socket_.send(request);
         return true;
     }
 
@@ -71,7 +73,7 @@ public:
         if (username_.empty()) return false;
         Serializer request;
         request << "logout" << username_;
-        if (socket_.send(request)) last_action_ = "logout";
+        socket_.send(request);
         return true;
     }
 
@@ -81,7 +83,7 @@ public:
             return false;
         Serializer request;
         request << "whisper" << username_ << token_ << recipient << tcontent;
-        if (socket_.send(request)) last_action_ = "whisper";
+        socket_.send(request);
         return true;
     }
 
@@ -89,7 +91,7 @@ public:
         if (username_.empty() || group_name.empty()) return false;
         Serializer request;
         request << "create_group" << username_ << token_ << group_name;
-        if (socket_.send(request)) last_action_ = "create_group";
+        socket_.send(request);
         return true;
     }
 
@@ -97,7 +99,7 @@ public:
         if (username_.empty()) return false;
         Serializer request;
         request << "join_group" << username_ << token_ << group_name;
-        if (socket_.send(request)) last_action_ = "join_group";
+        socket_.send(request);
         return true;
     }
 
@@ -108,7 +110,7 @@ public:
             return false;
         Serializer request;
         request << "msg_group" << username_ << token_ << group_name << tcontent;
-        if (socket_.send(request)) last_action_ = "msg_group";
+        socket_.send(request);
         return true;
     }
 
@@ -120,7 +122,7 @@ public:
         Serializer request;
         request << "voice_msg" << username_ << token_ << recipient << channels
                 << sample_rate << samples;
-        if (socket_.send(request)) last_action_ = "voice_msg";
+        socket_.send(request);
         return true;
     }
 
@@ -154,7 +156,6 @@ protected:
 
     std::string username_;     // The username of the currently logged user
     std::string token_;        // The user request token
-    std::string last_action_;  // The last request performed by the user
 
     std::thread listener_;  // The listener of responses and updates
 };
@@ -252,42 +253,40 @@ private:
         SendVoiceMessage(recipient, buffer.getChannelCount(),
                          buffer.getSampleRate(), samples);
 
-        std::cout << "Sent.";
-
         return true;
     }
 
     void HandleResponse(Deserializer& response) {
-        bool status;
-        response >> status;
+        std::string action;
+        ServerCodes status;
+        response >> action >> status;
 
-        if (!status) {
-            std::string error;
-            response >> error;
-            if (!error.empty()) std::cout << error << "\n";
+        if (status != ServerCodes::SUCCESS) {
+            std::cout << "Command failed with error code "
+                      << static_cast<int>(status) << ": " << status << '\n';
             return;
         }
 
-        if (last_action_ == "login") {
+        if (action == "login") {
             response >> username_;
             response >> token_;
             std::cout << "User " << username_ << " successfully logged in.\n";
-            std::cout << "Token: " << token_ << "\n";
-        } else if (last_action_ == "register") {
+            std::cout << "Token: " << token_ << '\n';
+        } else if (action == "register") {
             std::cout << "Register successful.\n";
-        } else if (last_action_ == "logout") {
+        } else if (action == "logout") {
             std::cout << "Logout successful.\n";
             username_.clear();
             token_.clear();
-        } else if (last_action_ == "whisper") {
+        } else if (action == "whisper") {
             // ???
-        } else if (last_action_ == "create_group") {
+        } else if (action == "create_group") {
             std::cout << "Group creation successful.\n";
-        } else if (last_action_ == "join_group") {
+        } else if (action == "join_group") {
             std::cout << "Group join successful.\n";
+        } else if (action == "voice_msg") {
+            std::cout << "Voice message sent.\n";
         }
-
-        last_action_.clear();
     }
 
     void HandleUpdate(Deserializer& response) {
@@ -299,14 +298,14 @@ private:
             response >> sender >> content;
             if (sender == username_)
                 return;  // Ignore the message if is sent by the user
-            std::cout << "[whisper] " << sender << ": " << content << "\n";
+            std::cout << "[whisper] " << sender << ": " << content << '\n';
         } else if (type == "msg_group") {
             std::string group_name, sender, content;
             response >> group_name >> sender >> content;
             if (sender == username_)
                 return;  // Ignore the message if is sent by the user
             std::cout << "[" << group_name << "] " << sender << ": " << content
-                      << "\n";
+                      << '\n';
         } else if (type == "voice_msg") {
             std::string sender;
             size_t channels, sample_rate;

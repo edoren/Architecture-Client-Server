@@ -1,6 +1,7 @@
 #include <cassert>
 #include <csignal>
 
+#include <exception>
 #include <iostream>
 #include <string>
 #include <unordered_map>
@@ -293,8 +294,8 @@ public:
 
     ServerCodes SendVoiceMessage(const std::string& username,
                                  const std::string& token,
-                                 const std::string& recipient,
-                                 size_t channels, size_t sample_rate,
+                                 const std::string& recipient, size_t channels,
+                                 size_t sample_rate,
                                  const std::vector<int16_t> samples) {
         if (!UserConnected(username) || !UserConnected(recipient))
             return ServerCodes::USER_NOT_CONNECTED;
@@ -360,31 +361,10 @@ void Login(ServerState& server, const NetIdentity& identity,
     std::string username, password;
     request >> username >> password;
     ServerCodes result = server.Login(identity, username, password);
+    response << result;
     if (result == ServerCodes::SUCCESS) {
         std::cout << "[User] '" << username << "' joins the chat server\n";
-        response << true << username << server.GetToken(username);
-    } else {
-        std::string error_message;
-        if (result == ServerCodes::IDENTITY_ALREADY_CONNECTED) {
-            error_message = "An user is already connected from this session.";
-        } else {
-            error_message = "Error with username or password.";
-        }
-        response << false << error_message;
-    }
-}
-
-void AddContact(ServerState& server, Deserializer& request,
-                Serializer& response) {
-    std::string username, token, contact;
-    request >> username >> token >> contact;
-    ServerCodes result = server.AddContact(username, token, contact);
-    if (result == ServerCodes::SUCCESS) {
-        std::cout << "[User] '" << username << "' added '" << contact << "'\n";
-        response << true;
-    } else {
-        std::string error_message = "Could not add user.";
-        response << false << error_message;
+        response << username << server.GetToken(username);
     }
 }
 
@@ -393,12 +373,20 @@ void Logout(ServerState& server, const NetIdentity& identity,
     std::string username;
     request >> username;
     ServerCodes result = server.Logout(identity, username);
+    response << result;
     if (result == ServerCodes::SUCCESS) {
         std::cout << "[User] '" << username << "' disconected.\n";
-        response << true;
-    } else {
-        std::string error_message = "Could not logout, please login first.";
-        response << false << error_message;
+    }
+}
+
+void AddContact(ServerState& server, Deserializer& request,
+                Serializer& response) {
+    std::string username, token, contact;
+    request >> username >> token >> contact;
+    ServerCodes result = server.AddContact(username, token, contact);
+    response << result;
+    if (result == ServerCodes::SUCCESS) {
+        std::cout << "[User] '" << username << "' added '" << contact << "'\n";
     }
 }
 
@@ -406,26 +394,18 @@ void Register(ServerState& server, Deserializer& request,
               Serializer& response) {
     std::string username, password;
     request >> username >> password;
-    if (server.Register(username, password) == ServerCodes::SUCCESS) {
+    ServerCodes result = server.Register(username, password);
+    response << result;
+    if (result == ServerCodes::SUCCESS) {
         std::cout << "[User] '" << username << "' just registered\n";
-        response << true;
-    } else {
-        std::string error_message = "Error registering: username '" + username +
-                                    "' already in the database";
-        response << false << error_message;
-    };
+    }
 }
 
 void Whisper(ServerState& server, Deserializer& request, Serializer& response) {
     std::string username, token, recipient, content;
     request >> username >> token >> recipient >> content;
     ServerCodes result = server.Whisper(username, token, recipient, content);
-    if (result == ServerCodes::SUCCESS) {
-        response << true;
-    } else {
-        std::string error_message = "Message not sent.";
-        response << false << error_message;
-    }
+    response << result;
 }
 
 void CreateGroup(ServerState& server, Deserializer& request,
@@ -433,13 +413,10 @@ void CreateGroup(ServerState& server, Deserializer& request,
     std::string username, token, group_name;
     request >> username >> token >> group_name;
     ServerCodes result = server.CreateGroup(username, token, group_name);
+    response << result;
     if (result == ServerCodes::SUCCESS) {
         std::cout << "[Group] '" << group_name << "' created, owner '"
                   << username << "'\n";
-        response << true;
-    } else {
-        std::string error_message = "Could not create group.";
-        response << false << error_message;
     }
 }
 
@@ -448,13 +425,10 @@ void JoinGroup(ServerState& server, Deserializer& request,
     std::string username, token, group_name;
     request >> username >> token >> group_name;
     ServerCodes result = server.JoinGroup(username, token, group_name);
+    response << result;
     if (result == ServerCodes::SUCCESS) {
         std::cout << "[Group] '" << username << "' just joined '" << group_name
                   << "'\n";
-        response << true;
-    } else {
-        std::string error_message = "Could not join group.";
-        response << false << error_message;
     }
 }
 
@@ -464,12 +438,7 @@ void MessageGroup(ServerState& server, Deserializer& request,
     request >> username >> token >> group_name >> content;
     ServerCodes result =
         server.MessageGroup(username, token, group_name, content);
-    if (result == ServerCodes::SUCCESS) {
-        response << true;
-    } else {
-        std::string error_message = "Message not sent to group.";
-        response << false << error_message;
-    }
+    response << result;
 }
 
 void SendVoiceMessage(ServerState& server, Deserializer& request,
@@ -481,26 +450,35 @@ void SendVoiceMessage(ServerState& server, Deserializer& request,
         samples;
     ServerCodes result = server.SendVoiceMessage(
         username, token, recipient, channels, sample_rate, samples);
-    if (result == ServerCodes::SUCCESS) {
-        response << true;
-    } else {
-        std::string error_message = "Message not sent to group.";
-        response << false << error_message;
-    }
+    response << result;
 }
 
 void Dispatch(ServerState& server) {
     std::string identity;
     Deserializer request;
-    server.GetSocket().recv(identity);
-    server.GetSocket().recv(request);
+
+    try {
+        server.GetSocket().recv(identity);
+        server.GetSocket().recv(request);
+    } catch (std::exception& e) {
+        std::cerr << e.what() << '\n';
+        std::cerr << "Error receiving data.\n";
+        return;
+    }
+
     if (gSignalStatus) return;
 
     std::string action;
-    request >> action;
+    try {
+        request >> action;
+    } catch (std::exception& e) {
+        std::cerr << e.what() << '\n';
+        std::cerr << "Error unpacking data, maybe not a valid request.\n";
+        return;
+    }
 
     Serializer response;
-    response << "response";
+    response << "response" << action;
 
     if (action == "register") {
         Register(server, request, response);
@@ -510,7 +488,7 @@ void Dispatch(ServerState& server) {
         Logout(server, identity, request, response);
     } else if (action == "add_contact") {
         AddContact(server, request, response);
-    } else if (action == "whisper") {  // Unicast chat
+    } else if (action == "whisper") {
         Whisper(server, request, response);
     } else if (action == "create_group") {
         CreateGroup(server, request, response);
@@ -521,7 +499,7 @@ void Dispatch(ServerState& server) {
     } else if (action == "voice_msg") {
         SendVoiceMessage(server, request, response);
     } else {
-        std::cerr << "Action not supported/implemented\n";
+        return;
     }
 
     server.GetSocket().send(identity, ZMQ_SNDMORE);

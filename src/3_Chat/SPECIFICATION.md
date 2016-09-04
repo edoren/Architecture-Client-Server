@@ -8,12 +8,14 @@ this document: https://github.com/msgpack/msgpack/blob/master/spec.md
 
 ### Notation
 
-    One object
-    +--------+
-    |        |
-    +--------+
-    
-    Variable number of objects
+One object
+
+    +--------+  
+    |        |  
+    +--------+  
+
+Variable number of objects
+
     +=================+
     |                 |
     +=================+
@@ -21,44 +23,49 @@ this document: https://github.com/msgpack/msgpack/blob/master/spec.md
 
 ### Requests
 
-    All the request have the same format
+All the request have the same format
+
     +--------+======+
     | action | data |
     +--------+======+
-    
-    - action: string defining the type of request
-    - data: arguments sent to the request
+
+- action: string defining the type of request
+- data: arguments sent to the request, see each message type for reference.
+
 
 ### Responses
 
-    Are messages sent from the server depending of the last request received
-    from the client.
-    
-    +------------+--------+======+
-    | "response" | status | data |
-    +------------+--------+======+
-    
-    - status: boolean, it defines if the response is successful or not.
-    - data: when status is false the data is set to a error message, otherwise
-            is are the response arguments
-    
-    Note: All the request from the clients has its respective response, if is
-          not defined bellow is assumed to be only the status with no data.
+Are messages sent from the server depending of the last request received
+from the client.
+
+    +------------+--------+------+======+
+    | "response" | action | code | data |
+    +------------+--------+------+======+
+
+- action: string defining the type of request the request is linked to
+- code: integer that defines the return code of the request if is not 0
+        the request failed, see ServerCodes.hpp for more reference.
+- data: when successful (code equals 0) this is set to the request data, see
+        each message type for reference.
+
+Note: All the request from the clients has its respective response.
+
 
 ### Updates
 
-    Messages sent from the server when something has changed that affect the
-    client. (E.g. An incomming message from an user)
+Messages sent from the server when something has changed that affect the
+client. (E.g. An incomming message from an user)
 
     +----------+--------+======+
     | "update" | action | data |
     +----------+--------+======+
-    
-    - action: string defining the type of request the update is linked to
-    - data: arguments of the update.
+
+- action: string defining the type of request the update is linked to
+- data: arguments of the update.
 
 
 ## Message Types
+
 
 ### Register
 
@@ -67,6 +74,7 @@ this document: https://github.com/msgpack/msgpack/blob/master/spec.md
     +------------+----------+----------+
     | "register" | username | password |
     +------------+----------+----------+
+
 
 ### Login
 
@@ -78,14 +86,15 @@ this document: https://github.com/msgpack/msgpack/blob/master/spec.md
 
 **Response**
 
-    If sucessfull the response is set to:
-    
-    +------------+------+----------+-------+
-    | "response" | TRUE | username | token |
-    +------------+------+----------+-------+
-    
-    - token: string defining the UUID of the user, that is used to authenticate
-             the other requests
+If sucessfull the response is set to:
+
+    +------------+---------+---+----------+-------+
+    | "response" | "login" | 0 | username | token |
+    +------------+---------+---+----------+-------+
+
+- token: string defining the UUID of the user, that is used to authenticate
+         the other requests
+
 
 ### Logout
 
@@ -95,6 +104,7 @@ this document: https://github.com/msgpack/msgpack/blob/master/spec.md
     | "logout" | username |
     +----------+----------+
 
+
 ### Add Contact
 
 **Request**
@@ -102,8 +112,9 @@ this document: https://github.com/msgpack/msgpack/blob/master/spec.md
     +---------------+----------+-------+---------+
     | "add_contact" | username | token | contact |
     +---------------+----------+-------+---------+
-    
-    contact: the username of the user to add to the contact list.
+
+- contact: the username of the user to add to the contact list.
+
 
 ### Whisper (Chat Unicast)
 
@@ -113,13 +124,14 @@ this document: https://github.com/msgpack/msgpack/blob/master/spec.md
     | "whisper" | username | token | recipient | content |
     +-----------+----------+-------+-----------+---------+
 
-    recipient: the username of the destination user
+- recipient: the username of the destination user
 
 **Update**
 
     +----------+-----------+--------+---------+
     | "update" | "whisper" | sender | content |
     +----------+-----------+--------+---------+
+
 
 ### Create Group
 
@@ -129,6 +141,7 @@ this document: https://github.com/msgpack/msgpack/blob/master/spec.md
     | "create_group" | username | token | group_name |
     +----------------+----------+-------+------------+
 
+
 ### Join Group
 
 **Request**
@@ -136,6 +149,7 @@ this document: https://github.com/msgpack/msgpack/blob/master/spec.md
     +--------------+----------+-------+------------+
     | "join_group" | username | token | group_name |
     +--------------+----------+-------+------------+
+
 
 ### Message Group (Chat Multicast)
 
@@ -151,18 +165,19 @@ this document: https://github.com/msgpack/msgpack/blob/master/spec.md
     | "update" | "msg_group" | group_name | sender | content |
     +----------+-------------+------------+--------+---------+
 
+
 ### Voice Message (Chat Multicast)
 
 **Request**
 
-    +-----------+----------+-------+-------------+----------+-------------+---------+
+    +-------------+----------+-------+-----------+----------+-------------+---------+
     | "voice_msg" | username | token | recipient | channels | sample_rate | samples |
-    +-----------+----------+-------+-------------+----------+-------------+---------+
+    +-------------+----------+-------+-----------+----------+-------------+---------+
 
-    recipient: the username of the destination user
-    channels: the number of channels the audio is recorded
-    sample_rate: the audio sample rate
-    samples: a list containing the audio samples
+- recipient: the username of the destination user
+- channels: the number of channels the audio is recorded
+- sample_rate: the audio sample rate
+- samples: a list containing the audio samples
 
 **Update**
 
@@ -170,7 +185,7 @@ this document: https://github.com/msgpack/msgpack/blob/master/spec.md
     | "update" | "voice_msg" | sender | channels | sample_rate | samples |
     +----------+-------------+--------+----------+-------------+---------+
 
-    sender: the username who send the voice message
-    channels: the number of channels the audio is recorded
-    sample_rate: the audio sample rate
-    samples: a list containing the audio samples
+- sender: the username who send the voice message
+- channels: the number of channels the audio is recorded
+- sample_rate: the audio sample rate
+- samples: a list containing the audio samples

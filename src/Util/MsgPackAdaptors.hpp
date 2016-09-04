@@ -6,6 +6,8 @@
 template <typename T>
 class Matrix;
 
+enum class ServerCodes : int;
+
 // User defined class template specialization
 namespace msgpack {
 inline namespace v2 {
@@ -34,6 +36,29 @@ struct pack<Matrix<T>> {
         o.pack(m.NumCols());
         o.pack(m.NumRows());
         o.pack(m.GetData());
+        return o;
+    }
+};
+
+template <>
+struct convert<ServerCodes> {
+    const msgpack::object& operator()(const msgpack::object& o,
+                                      ServerCodes& m) const {
+        if (o.type != msgpack::type::POSITIVE_INTEGER &&
+            o.type != msgpack::type::NEGATIVE_INTEGER)
+            throw msgpack::type_error();
+        m = static_cast<ServerCodes>(o.via.i64);
+        return o;
+    }
+};
+
+template <>
+struct pack<ServerCodes> {
+    template <typename Stream>
+    packer<Stream>& operator()(msgpack::packer<Stream>& o,
+                               const ServerCodes& m) const {
+        // packing member variables as an array.
+        o.pack(static_cast<int>(m));
         return o;
     }
 };
