@@ -2,6 +2,7 @@
 #include <cstdio>
 
 #include <algorithm>
+#include <chrono>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -28,10 +29,10 @@ std::string TrimSpaces(const std::string& str) {
 
 class ChatClient {
 public:
-    ChatClient(const std::string& endpoint)
+    ChatClient(const std::string& ip, size_t port)
           : context_(1), socket_(context_, ZMQ_DEALER) {
         // Connect to the server
-        socket_.connect(endpoint);
+        socket_.connect("tcp://" + ip + ':' + std::to_string(port));
 
         is_running_ = true;
         listener_ = std::thread(&ChatClient::ResponseListener, this);
@@ -154,11 +155,23 @@ protected:
     zmq::context_t context_;  // ZMQ context
     zmqw::socket socket_;     // Client socket
 
-    std::string username_;     // The username of the currently logged user
-    std::string token_;        // The user request token
+    std::string username_;  // The username of the currently logged user
+    std::string token_;     // The user request token
 
     std::thread listener_;  // The listener of responses and updates
 };
+
+static std::string HELP(R"(Usage:
+    /register [username] [password]      Register a new user in the chat
+    /login [username] [password]         Login user to the chat
+    /logout                              Logout the currently logged user
+    /msg [recipient] [content]           Send a text message to another user
+    /create_group [group_name]           Create a new group
+    /join_group [group_name]             Join an existent group
+    /msg_group [group_name] [content]    Send a text message to a group
+    /record [recipient]                  Record and send a voice message to a user
+    /play                                Play the last received voice message
+)");
 
 class ChatCLI : public ChatClient {
 public:
@@ -172,6 +185,8 @@ public:
         if (action == "/exit") {
             Logout();
             return false;
+        } else if (action == "/help") {
+            std::cout << HELP;
         } else if (action == "/register") {
             std::string username, password;
             stream >> username >> password;
@@ -187,10 +202,10 @@ public:
             stream >> contact;
             AddContact(contact);
         } else if (action == "/msg" || action == "/w") {
-            std::string receiver, content;
-            stream >> receiver;
+            std::string recipient, content;
+            stream >> recipient;
             std::getline(stream, content);
-            Whisper(receiver, content);
+            Whisper(recipient, content);
         } else if (action == "/create_group") {
             std::string group_name;
             stream >> group_name;
@@ -213,12 +228,15 @@ public:
             sound.play();
             std::cout << "Playing... ";
             while (sound.getStatus() == sf::Sound::Playing) {
-                sf::sleep(sf::milliseconds(100));
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
             std::cout << "Done.\n";
         } else {
             std::cout << "Action not supported or implemented.\n";
         }
+
+        // Wait for response
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
         return true;
     }
@@ -329,9 +347,11 @@ private:
 
 int main(/*int argc, char* argv[]*/) {
     // The state of the client aplication
-    std::string endpoint("tcp://localhost:4242");
-    ChatCLI client(endpoint);
-    std::cout << "Connecting to " << endpoint << '\n';
+    std::string ip = "localhost";
+    size_t port = 4242;
+    ChatCLI client(ip, port);
+    std::cout << "Connecting to chat in" << ip << ":" << port << '\n';
+    std::cout << "Use /help for more information\n";
 
     std::signal(SIGINT, gSignalHandler);
     std::signal(SIGTERM, gSignalHandler);
@@ -339,6 +359,7 @@ int main(/*int argc, char* argv[]*/) {
     zmq::pollitem_t items[] = {{nullptr, fileno(stdin), ZMQ_POLLIN, 0}};
 
     while (true) {
+        std::cout << "> " << std::flush;
         try {
             zmq::poll(items, 1, -1);
         } catch (zmq::error_t& e) {
