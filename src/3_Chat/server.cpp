@@ -296,7 +296,7 @@ public:
                                  const std::string& token,
                                  const std::string& recipient, size_t channels,
                                  size_t sample_rate,
-                                 const std::vector<int16_t> samples) {
+                                 const std::vector<int16_t>& samples) {
         if (!UserConnected(username) || !UserConnected(recipient))
             return ServerCodes::USER_NOT_CONNECTED;
 
@@ -306,6 +306,25 @@ public:
         Serializer update;
         update << ("update") << ("voice_msg") << username << channels
                << sample_rate << samples;
+        for (auto& identity : GetIdentities(recipient)) {
+            socket_.send(identity, ZMQ_SNDMORE);
+            socket_.send(update);
+        }
+
+        return ServerCodes::SUCCESS;
+    }
+
+    ServerCodes Call(const std::string& username, const std::string& token,
+                     const std::string& recipient,
+                     const std::vector<int16_t>& samples) {
+        if (!UserConnected(username) || !UserConnected(recipient))
+            return ServerCodes::USER_NOT_CONNECTED;
+
+        if (GetToken(username) != token)
+            return ServerCodes::USER_INCORRECT_TOKEN;
+
+        Serializer update;
+        update << ("update") << ("call") << username << samples;
         for (auto& identity : GetIdentities(recipient)) {
             socket_.send(identity, ZMQ_SNDMORE);
             socket_.send(update);
@@ -453,6 +472,14 @@ void SendVoiceMessage(ServerState& server, Deserializer& request,
     response << result;
 }
 
+void Call(ServerState& server, Deserializer& request, Serializer& response) {
+    std::string username, token, recipient;
+    std::vector<int16_t> samples;
+    request >> username >> token >> recipient >> samples;
+    ServerCodes result = server.Call(username, token, recipient, samples);
+    response << result;
+}
+
 void Dispatch(ServerState& server) {
     std::string identity;
     Deserializer request;
@@ -461,12 +488,11 @@ void Dispatch(ServerState& server) {
         server.GetSocket().recv(identity);
         server.GetSocket().recv(request);
     } catch (std::exception& e) {
+        if (gSignalStatus) return;
         std::cerr << e.what() << '\n';
         std::cerr << "Error receiving data.\n";
         return;
     }
-
-    if (gSignalStatus) return;
 
     std::string action;
     try {
@@ -498,6 +524,8 @@ void Dispatch(ServerState& server) {
         MessageGroup(server, request, response);
     } else if (action == "voice_msg") {
         SendVoiceMessage(server, request, response);
+    } else if (action == "call") {
+        Call(server, request, response);
     } else {
         return;
     }
