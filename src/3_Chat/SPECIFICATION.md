@@ -23,11 +23,12 @@ Variable number of objects
 
 ### Requests
 
-All the request have the same format
+Messages sent from the client to the server, all the request have the same
+format-
 
-    +--------+======+
-    | action | data |
-    +--------+======+
+    +-----------+--------+======+
+    | "request" | action | data |
+    +-----------+--------+======+
 
 - action: string defining the type of request
 - data: arguments sent to the request, see each message type for reference.
@@ -53,6 +54,19 @@ Note: All the request from the clients has its respective response.
 
 ### Updates
 
+Messages sent from the client when something has changed that affect the
+client. (E.g. An incomming message from an user)
+
+    +----------+--------+======+
+    | "update" | action | data |
+    +----------+--------+======+
+
+- action: string defining the type of request the update is linked to
+- data: arguments of the update.
+
+
+### Updates
+
 Messages sent from the server when something has changed that affect the
 client. (E.g. An incomming message from an user)
 
@@ -71,18 +85,18 @@ client. (E.g. An incomming message from an user)
 
 **Request**
 
-    +------------+----------+----------+
-    | "register" | username | password |
-    +------------+----------+----------+
+    +-----------+------------+----------+----------+
+    | "request" | "register" | username | password |
+    +-----------+------------+----------+----------+
 
 
 ### Login
 
 **Request**
 
-    +---------+----------+----------+
-    | "login" | username | password |
-    +---------+----------+----------+
+    +-----------+---------+----------+----------+
+    | "request" | "login" | username | password |
+    +-----------+---------+----------+----------+
 
 **Response**
 
@@ -100,9 +114,9 @@ If sucessfull the response is set to:
 
 **Request**
 
-    +----------+----------+
-    | "logout" | username |
-    +----------+----------+
+    +-----------+----------+----------+
+    | "request" | "logout" | username |
+    +-----------+----------+----------+
 
 
 ### Add Contact
@@ -120,9 +134,9 @@ If sucessfull the response is set to:
 
 **Request**
 
-    +-----------+----------+-------+-----------+---------+
-    | "whisper" | username | token | recipient | content |
-    +-----------+----------+-------+-----------+---------+
+    +-----------+-----------+----------+-------+-----------+---------+
+    | "request" | "whisper" | username | token | recipient | content |
+    +-----------+-----------+----------+-------+-----------+---------+
 
 - recipient: the username of the destination user
 
@@ -137,9 +151,9 @@ If sucessfull the response is set to:
 
 **Request**
 
-    +----------------+----------+-------+------------+
-    | "create_group" | username | token | group_name |
-    +----------------+----------+-------+------------+
+    +-----------+----------------+----------+-------+------------+
+    | "request" | "create_group" | username | token | group_name |
+    +-----------+----------------+----------+-------+------------+
 
 
 ### Join Group
@@ -155,9 +169,9 @@ If sucessfull the response is set to:
 
 **Request**
 
-    +-------------+----------+-------+------------+---------+
-    | "msg_group" | username | token | group_name | content |
-    +-------------+----------+-------+------------+---------+
+    +-----------+-------------+----------+-------+------------+---------+
+    | "request" | "msg_group" | username | token | group_name | content |
+    +-----------+-------------+----------+-------+------------+---------+
 
 **Update**
 
@@ -170,9 +184,9 @@ If sucessfull the response is set to:
 
 **Request**
 
-    +-------------+----------+-------+-----------+----------+-------------+---------+
-    | "voice_msg" | username | token | recipient | channels | sample_rate | samples |
-    +-------------+----------+-------+-----------+----------+-------------+---------+
+    +-----------+-------------+----------+-------+-----------+----------+-------------+---------+
+    | "request" | "voice_msg" | username | token | recipient | channels | sample_rate | samples |
+    +-----------+-------------+----------+-------+-----------+----------+-------------+---------+
 
 - recipient: the username of the destination user
 - channels: the number of channels the audio is recorded
@@ -191,23 +205,63 @@ If sucessfull the response is set to:
 - samples: a list containing the audio samples
 
 
-### Call
+### Join Call
 
 **Request**
-```
-+--------+----------+-------+-----------+---------+
-| "call" | username | token | recipient | samples |
-+--------+----------+-------+-----------+---------+
-```
-- recipient: the username of the destination user
+
+Request the server to join the group call
+
+    +-----------+-------------+----------+-------+------------+
+    | "request" | "join_call" | username | token | group_name |
+    +-----------+-------------+----------+-------+------------+
+
+- group_name: the name of the group to join a call
+
+**Response**
+
+Tell the user that the connexion was established.
+
+    +------------+-------------+---+------------+
+    | "response" | "join_call" | 0 | group_name |
+    +------------+-------------+---+------------+
+
+- group_name: the name of the group to join a call
+
+**Update**
+
+**Client**
+
+If the conexion was established this is the recorded audio data from the user
+to the server
+
+    +----------+-------------+----------+-------+------------+---------+
+    | "update" | "call_data" | username | token | group_name | samples |
+    +----------+-------------+----------+-------+------------+---------+
+
+- group_name: the name of the group to send the audio samples.
+- samples: a list containing the audio samples.
+
+**Server**
+
+If the conexion was established this is the audio data from the server to the
+user
+
+    +----------+-------------+--------+---------+
+    | "update" | "call_data" | sender | samples |
+    +----------+-------------+--------+---------+
+
+- sender: the username who send the call notification
 - samples: a list containing the audio samples
 
-**Updates**
+### Leave Call
 
-```
-+----------+--------+--------+---------+
-| "update" | "call" | sender | samples |
-+----------+--------+--------+---------+
-```
-- sender: the username who send the call notification
+**Request**
+
+Leave the actual call
+
+    +-----------+--------------+----------+-------+
+    | "request" | "leave_call" | username | token |
+    +-----------+--------------+----------+-------+
+
+- recipient: the username of the destination user
 - samples: a list containing the audio samples

@@ -5,16 +5,17 @@
 #include <chrono>
 #include <condition_variable>
 #include <iostream>
-#include <deque>
 #include <sstream>
 #include <string>
 #include <thread>
+#include <unordered_map>
 
 #include <SFML/Audio.hpp>
 
 #include <Util/Serializer.hpp>
 #include <Util/ZMQWrapper.hpp>
 
+#include "SafeQueue.hpp"
 #include "ServerCodes.hpp"
 
 static volatile std::sig_atomic_t gSignalStatus = 0;
@@ -52,34 +53,31 @@ public:
     bool Register(const std::string& username, const std::string password) {
         if (username.empty() || password.empty()) return false;
         Serializer request;
-        request << "register" << username << password;
-        socket_.send(request);
-        return true;
+        request << ("request") << ("register") << username << password;
+        return socket_.send(request);
     }
 
     bool Login(const std::string& username, const std::string password) {
         if (!username_.empty() || username.empty() || password.empty())
             return false;
         Serializer request;
-        request << "login" << username << password;
-        socket_.send(request);
-        return true;
+        request << ("request") << ("login") << username << password;
+        return socket_.send(request);
     }
 
     bool Logout() {
         if (username_.empty()) return false;
         Serializer request;
-        request << "logout" << username_;
-        socket_.send(request);
-        return true;
+        request << ("request") << ("logout") << username_;
+        return socket_.send(request);
     }
 
     bool AddContact(const std::string& contact) {
         if (username_.empty() || contact.empty()) return false;
         Serializer request;
-        request << "add_contact" << username_ << token_ << contact;
-        socket_.send(request);
-        return true;
+        request << ("request") << ("add_contact") << username_ << token_
+                << contact;
+        return socket_.send(request);
     }
 
     bool Whisper(const std::string& recipient, const std::string content) {
@@ -87,25 +85,25 @@ public:
         if (username_.empty() || recipient.empty() || tcontent.empty())
             return false;
         Serializer request;
-        request << "whisper" << username_ << token_ << recipient << tcontent;
-        socket_.send(request);
-        return true;
+        request << ("request") << ("whisper") << username_ << token_
+                << recipient << tcontent;
+        return socket_.send(request);
     }
 
     bool CreateGroup(const std::string& group_name) {
         if (username_.empty() || group_name.empty()) return false;
         Serializer request;
-        request << "create_group" << username_ << token_ << group_name;
-        socket_.send(request);
-        return true;
+        request << ("request") << ("create_group") << username_ << token_
+                << group_name;
+        return socket_.send(request);
     }
 
     bool JoinGroup(const std::string& group_name) {
         if (username_.empty()) return false;
         Serializer request;
-        request << "join_group" << username_ << token_ << group_name;
-        socket_.send(request);
-        return true;
+        request << ("request") << ("join_group") << username_ << token_
+                << group_name;
+        return socket_.send(request);
     }
 
     bool MessageGroup(const std::string& group_name,
@@ -114,9 +112,9 @@ public:
         if (username_.empty() || group_name.empty() || tcontent.empty())
             return false;
         Serializer request;
-        request << "msg_group" << username_ << token_ << group_name << tcontent;
-        socket_.send(request);
-        return true;
+        request << ("request") << ("msg_group") << username_ << token_
+                << group_name << tcontent;
+        return socket_.send(request);
     }
 
     bool SendVoiceMessage(const std::string& recipient, size_t channels,
@@ -125,20 +123,28 @@ public:
         if (username_.empty() || recipient.empty()) return false;
 
         Serializer request;
-        request << "voice_msg" << username_ << token_ << recipient << channels
-                << sample_rate << samples;
-        socket_.send(request);
-        return true;
+        request << ("request") << ("voice_msg") << username_ << token_
+                << recipient << channels << sample_rate << samples;
+        return socket_.send(request);
     }
 
-    bool SendCallData(const std::string& recipient,
-                      const std::vector<int16_t>& samples) {
-        if (username_.empty() || recipient.empty()) return false;
+    bool JoinCall(const std::string& group_name) {
+        if (username_.empty() || group_name.empty()) return false;
 
         Serializer request;
-        request << "call" << username_ << token_ << recipient << samples;
-        socket_.send(request);
-        return true;
+        request << ("request") << ("join_call") << username_ << token_
+                << group_name;
+        return socket_.send(request);
+    }
+
+    bool SendCallData(const std::string& group_name,
+                      const std::vector<int16_t>& samples) {
+        if (username_.empty() || group_name.empty()) return false;
+
+        Serializer request;
+        request << ("update") << ("call_data") << username_ << token_
+                << group_name << samples;
+        return socket_.send(request);
     }
 
 private:
@@ -186,13 +192,13 @@ static std::string HELP(R"(Usage:
     /record [recipient]                  Record and send a voice message to a user
     /play                                Play the last received voice message
     /call [recipient]                    Call a user
+    /stop_call                           Close the current call
 )");
 
 class RecorderLOL : public sf::SoundRecorder {
 public:
-    RecorderLOL(std::mutex& queue_mutex,
-                std::deque<std::vector<int16_t>>& samples_queue)
-          : queue_mutex_(queue_mutex), samples_queue_(samples_queue) {}
+    RecorderLOL(std::function<void(std::vector<int16_t>&&)> listener)
+          : listener_(listener) {}
 
     ~RecorderLOL() {
         stop();
@@ -206,8 +212,7 @@ private:
     virtual bool onProcessSamples(const int16_t* samples,
                                   std::size_t sample_count) {
         if (sample_count) {
-            std::lock_guard<std::mutex> lk(queue_mutex_);
-            samples_queue_.emplace_back(samples, samples + sample_count);
+            listener_({samples, samples + sample_count});
         }
         return true;
     }
@@ -215,18 +220,18 @@ private:
     virtual void onStop() {}
 
 private:
-    std::mutex& queue_mutex_;
-    std::deque<std::vector<int16_t>>& samples_queue_;
+    std::string group_name_;
+    std::function<void(std::vector<int16_t>&&)> listener_;
 };
 
 class PlayerLOL : public sf::SoundStream {
 public:
-    PlayerLOL(std::mutex& queue_mutex,
-              std::deque<std::vector<int16_t>>& samples_queue)
-          :
-            queue_mutex_(queue_mutex),
-            samples_queue_(samples_queue) {
+    PlayerLOL() {
         initialize(1, 44100);
+    }
+
+    void AddSamples(std::vector<int16_t>&& samples) {
+        samples_queue_.push(samples);
     }
 
 private:
@@ -234,8 +239,7 @@ private:
         if (getStatus() != sf::SoundStream::Playing) return false;
 
         if (!samples_queue_.empty()) {
-            std::lock_guard<std::mutex> lk(queue_mutex_);
-            samples_queue_.pop_front();
+            samples_queue_.pop();
         }
 
         while (samples_queue_.empty() &&
@@ -254,19 +258,21 @@ private:
     virtual void onSeek(sf::Time /*timeOffset*/) {}
 
 private:
-    std::mutex& queue_mutex_;
-    std::deque<std::vector<int16_t>>& samples_queue_;
+    SafeQueue<std::vector<int16_t>> samples_queue_;
 };
 
 class ChatCLI : public ChatClient {
 public:
     ChatCLI(const std::string& ip, size_t port)
-          : ChatClient(ip, port),
-            responses_arrived_(0),
-            outgoing_call_(false) {}
+          : ChatClient(ip, port), responses_arrived_(0), outgoing_call_(false) {
+        std::cout << "Connecting to chat in " << ip << ":" << port << '\n';
+        std::cout << "Use /help for more information\n";
+    }
 
     ~ChatCLI() {
         outgoing_call_ = false;
+        if (call_thread_.joinable()) call_thread_.join();
+        std::cout << "Client closed.\n";
     }
 
 public:
@@ -326,17 +332,11 @@ public:
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
             std::cout << "Done.\n";
-        } else if (action == "/call") {
-            std::string recipient;
-            stream >> recipient;
-            call_samples_mutex_.lock();
-            call_samples_.clear();
-            call_samples_mutex_.unlock();
-            std::thread thread(&ChatCLI::DoCall, this, recipient);
-            std::cout << "Calling... press enter to stop";
-            std::cin.ignore(10000, '\n');
-            outgoing_call_ = false;
-            thread.join();
+        } else if (action == "/join_call") {
+            if (outgoing_call_) std::cout << "Error outgoing call.";
+            std::string group_name;
+            stream >> group_name;
+            request_sent = JoinCall(group_name);
         } else {
             std::cout << "Action not supported or implemented.\n";
         }
@@ -384,37 +384,52 @@ private:
         return true;
     }
 
-    void DoCall(const std::string& other) {
+    void DoCall(const std::string& group_name) {
         if (!sf::SoundRecorder::isAvailable()) {
             std::cerr
                 << "Sorry, audio capture is not supported by your system\n";
             return;
         }
 
-        std::mutex queue_mutex;
-        std::deque<std::vector<int16_t>> outgoing_;
+        RecorderLOL recorder([&](std::vector<int16_t>&& samples) {
+            SendCallData(group_name, samples);
+        });
+        std::cout << "Starting call.\n";
+        size_t sample_rate = 44100;
+        recorder.start(sample_rate);
 
-        RecorderLOL recorder(queue_mutex, outgoing_);
-        PlayerLOL player(call_samples_mutex_, call_samples_);
-
-        recorder.start(44100);
-        player.play();
+        std::unordered_map<std::string, PlayerLOL> players;
+        std::cout << "Playing... ";
 
         outgoing_call_ = true;
         while (outgoing_call_) {
-            if (!outgoing_.empty()) {
-                std::lock_guard<std::mutex> lk(queue_mutex);
-                if (!SendCallData(other, outgoing_.front())) {
-                    std::cout << "Please login first.\n";
-                    break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            if (!call_samples_.empty()) {
+                std::string& user = call_samples_.front().first;
+                std::vector<int16_t>& samples = call_samples_.front().second;
+                auto it = players.find(user);
+                if (it == players.end()) {
+                    // Create a new player
+                    PlayerLOL& player = players[user];
+                    player.AddSamples(std::move(samples));
+                    player.play();;
+                } else {
+                    PlayerLOL& player = it->second;
+                    player.AddSamples(std::move(samples));
                 }
-                outgoing_.pop_front();
-            } else {
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                call_samples_.pop();
             }
         }
 
-        player.stop();
+        std::cout << "Stopping call.\n";
+
+        outgoing_call_ = false;
+
+        // Stop all the players
+        for (auto& pair : players) {
+            pair.second.stop();
+        }
+
         recorder.stop();
     }
 
@@ -423,40 +438,39 @@ private:
         ServerCodes status;
         response >> action >> status;
 
-        if (status != ServerCodes::SUCCESS) {
+        if (status == ServerCodes::SUCCESS) {
+            if (action == "login") {
+                response >> username_;
+                response >> token_;
+                std::cout << "User " << username_
+                          << " successfully logged in.\n";
+                std::cout << "Token: " << token_ << '\n';
+            } else if (action == "register") {
+                std::cout << "Register successful.\n";
+            } else if (action == "logout") {
+                std::cout << "Logout successful.\n";
+                username_.clear();
+                token_.clear();
+            } else if (action == "whisper") {
+                // ???
+            } else if (action == "create_group") {
+                std::cout << "Group creation successful.\n";
+            } else if (action == "join_group") {
+                std::cout << "Group join successful.\n";
+            } else if (action == "voice_msg") {
+                std::cout << "Voice message sent.\n";
+            } else if (action == "join_call") {
+                std::string group_name;
+                response >> group_name;
+                if (call_thread_.joinable()) call_thread_.join();
+                call_thread_ = std::thread(&ChatCLI::DoCall, this, group_name);
+            }
+        } else {
             std::cout << "Command failed with error code "
                       << static_cast<int>(status) << ": " << status << '\n';
-
-            if (action == "call") {
-                outgoing_call_ = false;
-            }
-
-            return;
         }
 
-        if (action == "login") {
-            response >> username_;
-            response >> token_;
-            std::cout << "User " << username_ << " successfully logged in.\n";
-            std::cout << "Token: " << token_ << '\n';
-        } else if (action == "register") {
-            std::cout << "Register successful.\n";
-        } else if (action == "logout") {
-            std::cout << "Logout successful.\n";
-            username_.clear();
-            token_.clear();
-        } else if (action == "whisper") {
-            // ???
-        } else if (action == "create_group") {
-            std::cout << "Group creation successful.\n";
-        } else if (action == "join_group") {
-            std::cout << "Group join successful.\n";
-        } else if (action == "voice_msg") {
-            std::cout << "Voice message sent.\n";
-        } else if (action == "call") {
-        }
-
-        if (action != "call") responses_arrived_++;
+        responses_arrived_++;
         cv_.notify_one();
     }
 
@@ -487,13 +501,13 @@ private:
             std::cout << "[ALERT] " << sender
                       << " sent you a voice message, /play to listen it."
                       << '\n';
-        } else if (outgoing_call_ && type == "call") {
+        } else if (outgoing_call_ && type == "call_data") {
             std::string sender;
             std::vector<int16_t> samples;
             response >> sender >> samples;
-            call_samples_mutex_.lock();
-            call_samples_.push_back(std::move(samples));
-            call_samples_mutex_.unlock();
+            std::cout << "Receiving " << samples.size() << " samples from "
+                      << sender << std::endl;
+            call_samples_.push({sender, std::move(samples)});
         }
     }
 
@@ -506,8 +520,8 @@ private:
     sf::SoundBuffer last_voice_msg_;
 
     bool outgoing_call_;
-    std::mutex call_samples_mutex_;
-    std::deque<std::vector<int16_t>> call_samples_;  // Hold the call samples
+    std::thread call_thread_;
+    SafeQueue<std::pair<std::string, std::vector<int16_t>>> call_samples_;
 };
 
 #ifdef _WIN32
@@ -520,8 +534,6 @@ int main(/*int argc, char* argv[]*/) {
     std::string ip = "localhost";
     size_t port = 4242;
     ChatCLI client(ip, port);
-    std::cout << "Connecting to chat in " << ip << ":" << port << '\n';
-    std::cout << "Use /help for more information\n";
 
     std::signal(SIGINT, gSignalHandler);
     std::signal(SIGTERM, gSignalHandler);
@@ -529,7 +541,6 @@ int main(/*int argc, char* argv[]*/) {
     zmq::pollitem_t items[] = {{nullptr, fileno(stdin), ZMQ_POLLIN, 0}};
 
     while (true) {
-        std::cout << "> " << std::flush;
         try {
             zmq::poll(items, 1, -1);
         } catch (zmq::error_t& e) {
@@ -552,8 +563,6 @@ int main(/*int argc, char* argv[]*/) {
             }
         }
     }
-
-    std::cout << "Client closed.\n";
 
     return 0;
 }

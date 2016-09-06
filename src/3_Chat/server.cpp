@@ -118,6 +118,25 @@ private:
     std::unordered_map<std::string, Group> groups_;
 };
 
+struct UserConnection {
+    UserConnection() = default;
+    UserConnection(User* user, std::string token,
+                   std::vector<NetIdentity>&& identities)
+          : user(user), token(token), identities(identities) {}
+    User* user;
+    std::string token;
+    std::string current_call;
+    std::vector<NetIdentity> identities;
+};
+
+struct GroupCall {
+    GroupCall() = default;
+    GroupCall(Group* group, std::unordered_set<std::string>&& participants)
+          : group(group), participants(participants) {}
+    Group* group;
+    std::unordered_set<std::string> participants;
+};
+
 class ServerState {
 public:
     ServerState(zmqw::socket& socket, DataBase& db)
@@ -158,7 +177,8 @@ public:
             users_[username].identities.push_back(identity);
         } else {
             // Add the user to the server and register its identity
-            users_[username] = {user, UUID::UUID4().AsString(), {identity}};
+            users_[username] =
+                UserConnection(user, UUID::UUID4().AsString(), {identity});
         }
 
         return ServerCodes::SUCCESS;
@@ -278,8 +298,8 @@ public:
             return ServerCodes::GROUP_MEMBER_DOES_NOT_EXIST;
 
         Serializer update;
-        update << "update"
-               << "msg_group" << group_name << username << content;
+        update << ("update") << ("msg_group") << group_name << username
+               << content;
         for (auto& member : group.GetMembers()) {
             if (UserConnected(member)) {
                 for (auto& identity : GetIdentities(member)) {
@@ -314,28 +334,76 @@ public:
         return ServerCodes::SUCCESS;
     }
 
-    ServerCodes Call(const std::string& username, const std::string& token,
-                     const std::string& recipient,
-                     const std::vector<int16_t>& samples) {
-        if (!UserConnected(username) || !UserConnected(recipient))
-            return ServerCodes::USER_NOT_CONNECTED;
+    ServerCodes JoinCall(const std::string& username, const std::string& token,
+                         const std::string& group_name) {
+        if (!UserConnected(username)) return ServerCodes::USER_NOT_CONNECTED;
 
         if (GetToken(username) != token)
             return ServerCodes::USER_INCORRECT_TOKEN;
 
-        Serializer update;
-        update << ("update") << ("call") << username << samples;
-        for (auto& identity : GetIdentities(recipient)) {
-            socket_.send(identity, ZMQ_SNDMORE);
-            socket_.send(update);
+        if (!database_.GroupExists(group_name))
+            return ServerCodes::GROUP_DOES_NOT_EXIST;
+
+        Group& group = database_.GetGroup(group_name);
+        if (!group.IsMember(username))
+            return ServerCodes::GROUP_MEMBER_DOES_NOT_EXIST;
+
+        auto it = group_calls_.find(group_name);
+        if (it == group_calls_.end()) {
+            group_calls_[group_name] = GroupCall(&group, {username});
+        } else {
+            group_calls_[group_name].participants.insert(username);
         }
 
         return ServerCodes::SUCCESS;
     }
 
+    void ProcessGroupCallData(const std::string& username,
+                              const std::string& token,
+                              const std::string& group_name,
+                              const std::vector<int16_t>& samples) {
+        if (!UserConnected(username))
+            return;  // ServerCodes::USER_NOT_CONNECTED;
+
+        if (GetToken(username) != token)
+            return;  // ServerCodes::USER_INCORRECT_TOKEN
+
+        if (!GroupCallExist(group_name))
+            return;  // ServerCodes::GROUP_DOES_NOT_EXIST
+
+        GroupCall& group_call = GetGroupCall(group_name);
+        Group& group = *group_call.group;
+        auto& participants = group_call.participants;
+
+        if (!group.IsMember(username))
+            return;  // ServerCodes::GROUP_MEMBER_DOES_NOT_EXIST
+
+        Serializer update;
+        update << ("update") << ("call_data") << username << samples;
+
+        for (auto& member : group.GetMembers()) {
+            // Check if member is not the user who send the data, is connected
+            // and is participant of the group call
+            if (member != username && UserConnected(member) &&
+                participants.find(member) != participants.end()) {
+                for (auto& identity : GetIdentities(member)) {
+                    socket_.send(identity, ZMQ_SNDMORE);
+                    socket_.send(update);
+                }
+            }
+        }
+
+        return;  // ServerCodes::SUCCESS
+    }
+
     bool UserConnected(const std::string& username) const {
         auto it = users_.find(username);
         return (it != users_.end());
+    }
+
+    bool GroupCallExist(const std::string& group_name) const {
+        auto it = group_calls_.find(group_name);
+        return (it != group_calls_.end());
     }
 
     bool IdentityConnected(const NetIdentity& identity) {
@@ -345,6 +413,10 @@ public:
 
     User& GetUser(const std::string& username) {
         return *users_.find(username)->second.user;
+    }
+
+    GroupCall& GetGroupCall(const std::string& group_name) {
+        return group_calls_.find(group_name)->second;
     }
 
     const std::string& GetToken(const std::string& username) {
@@ -357,13 +429,6 @@ public:
     }
 
 private:
-    struct UserConnection {
-        User* user;
-        std::string token;
-        std::vector<NetIdentity> identities;
-    };
-
-private:
     // Server socket
     zmqw::socket& socket_;
 
@@ -373,6 +438,7 @@ private:
     // Server state
     std::unordered_set<NetIdentity> identities_;
     std::unordered_map<std::string, UserConnection> users_;
+    std::unordered_map<std::string, GroupCall> group_calls_;
 };
 
 void Register(ServerState& server, Deserializer& request,
@@ -472,21 +538,31 @@ void SendVoiceMessage(ServerState& server, Deserializer& request,
     response << result;
 }
 
-void Call(ServerState& server, Deserializer& request, Serializer& response) {
-    std::string username, token, recipient;
-    std::vector<int16_t> samples;
-    request >> username >> token >> recipient >> samples;
-    ServerCodes result = server.Call(username, token, recipient, samples);
+void JoinCall(ServerState& server, Deserializer& request,
+              Serializer& response) {
+    std::string username, token, group_name;
+    request >> username >> token >> group_name;
+    ServerCodes result = server.JoinCall(username, token, group_name);
     response << result;
+    if (result == ServerCodes::SUCCESS) {
+        response << group_name;
+    }
+}
+
+void ProcessGroupCallData(ServerState& server, Deserializer& update) {
+    std::string username, token, group_name;
+    std::vector<int16_t> samples;
+    update >> username >> token >> group_name >> samples;
+    server.ProcessGroupCallData(username, token, group_name, samples);
 }
 
 void Dispatch(ServerState& server) {
     std::string identity;
-    Deserializer request;
+    Deserializer message;
 
     try {
         server.GetSocket().recv(identity);
-        server.GetSocket().recv(request);
+        server.GetSocket().recv(message);
     } catch (std::exception& e) {
         if (gSignalStatus) return;
         std::cerr << e.what() << '\n';
@@ -494,44 +570,52 @@ void Dispatch(ServerState& server) {
         return;
     }
 
+    std::string msg_type;
     std::string action;
     try {
-        request >> action;
+        message >> msg_type;
+        message >> action;
     } catch (std::exception& e) {
         std::cerr << e.what() << '\n';
-        std::cerr << "Error unpacking data, maybe not a valid request.\n";
+        std::cerr << "Error unpacking data, maybe not a valid message.\n";
         return;
     }
 
-    Serializer response;
-    response << "response" << action;
+    if (msg_type == "request") {
+        Serializer response;
+        response << "response" << action;
 
-    if (action == "register") {
-        Register(server, request, response);
-    } else if (action == "login") {
-        Login(server, identity, request, response);
-    } else if (action == "logout") {
-        Logout(server, identity, request, response);
-    } else if (action == "add_contact") {
-        AddContact(server, request, response);
-    } else if (action == "whisper") {
-        Whisper(server, request, response);
-    } else if (action == "create_group") {
-        CreateGroup(server, request, response);
-    } else if (action == "join_group") {
-        JoinGroup(server, request, response);
-    } else if (action == "msg_group") {
-        MessageGroup(server, request, response);
-    } else if (action == "voice_msg") {
-        SendVoiceMessage(server, request, response);
-    } else if (action == "call") {
-        Call(server, request, response);
-    } else {
-        return;
+        if (action == "register") {
+            Register(server, message, response);
+        } else if (action == "login") {
+            Login(server, identity, message, response);
+        } else if (action == "logout") {
+            Logout(server, identity, message, response);
+        } else if (action == "add_contact") {
+            AddContact(server, message, response);
+        } else if (action == "whisper") {
+            Whisper(server, message, response);
+        } else if (action == "create_group") {
+            CreateGroup(server, message, response);
+        } else if (action == "join_group") {
+            JoinGroup(server, message, response);
+        } else if (action == "msg_group") {
+            MessageGroup(server, message, response);
+        } else if (action == "voice_msg") {
+            SendVoiceMessage(server, message, response);
+        } else if (action == "join_call") {
+            JoinCall(server, message, response);
+        } else {
+            return;
+        }
+
+        server.GetSocket().send(identity, ZMQ_SNDMORE);
+        server.GetSocket().send(response);
+    } else if (msg_type == "update") {
+        if (action == "call_data") {
+            ProcessGroupCallData(server, message);
+        }
     }
-
-    server.GetSocket().send(identity, ZMQ_SNDMORE);
-    server.GetSocket().send(response);
 }
 
 int main(/*int argc, char* argv[]*/) {
@@ -551,6 +635,7 @@ int main(/*int argc, char* argv[]*/) {
     ServerState state(socket, database);
     state.Register("edoren", "123");
     state.Register("pepe", "123");
+    state.Register("grillo", "123");
 
     while (true) {
         try {
