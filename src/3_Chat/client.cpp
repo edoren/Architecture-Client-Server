@@ -435,7 +435,7 @@ private:
 
     void HandleResponse(Deserializer& response) {
         std::string action;
-        ServerCodes status;
+        ServerCodes status = ServerCodes::SUCCESS;
         response >> action >> status;
 
         if (status == ServerCodes::SUCCESS) {
@@ -493,7 +493,8 @@ private:
                       << '\n';
         } else if (type == "voice_msg") {
             std::string sender;
-            size_t channels, sample_rate;
+            size_t channels = 1;
+            size_t sample_rate = 44100;
             std::vector<int16_t> samples;
             response >> sender >> channels >> sample_rate >> samples;
             last_voice_msg_.loadFromSamples(samples.data(), samples.size(),

@@ -27,8 +27,8 @@ int main(int /*argc*/, char** /*argv*/) {
         std::cout << "Receiving message...\n";
 
         std::string operation;
-        float operand1;
-        float operand2;
+        float operand1 = 0;
+        float operand2 = 1;
         float result;
 
         request >> operation;
