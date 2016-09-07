@@ -399,7 +399,6 @@ private:
         recorder.start(sample_rate);
 
         std::unordered_map<std::string, PlayerLOL> players;
-        std::cout << "Playing... ";
 
         outgoing_call_ = true;
         while (outgoing_call_) {
@@ -506,8 +505,6 @@ private:
             std::string sender;
             std::vector<int16_t> samples;
             response >> sender >> samples;
-            std::cout << "Receiving " << samples.size() << " samples from "
-                      << sender << std::endl;
             call_samples_.push({sender, std::move(samples)});
         }
     }
